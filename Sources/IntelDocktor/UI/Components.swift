@@ -23,7 +23,7 @@ struct DrawerTabBar<Trailing: View>: View {
             Spacer(minLength: 4)
             trailing()
         }
-        .frame(height: 34)
+        .frame(height: 28)
     }
 }
 
@@ -43,20 +43,20 @@ private struct TabButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: tab.symbol)
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 18)
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 15)
                 if selected {
                     Text(tab.label)
-                        .font(Theme.font(14, .bold))
+                        .font(Theme.font(12, .bold))
                         .lineLimit(1)
                         .fixedSize()
                 }
             }
             .foregroundStyle(selected ? Theme.primary : Theme.secondary)
-            .padding(.horizontal, selected ? 11 : 9)
-            .frame(height: 32)
+            .padding(.horizontal, selected ? 9 : 7)
+            .frame(height: 26)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(selected ? Color.white.opacity(0.12) : (hover ? Color.white.opacity(0.06) : .clear))
             )
             .contentShape(Rectangle())
@@ -79,7 +79,7 @@ struct IconButton: View {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
                 .foregroundStyle(hover ? Theme.primary : tint)
-                .frame(width: 30, height: 30)
+                .frame(width: 26, height: 26)
                 .background(Circle().fill(hover ? Color.white.opacity(0.08) : .clear))
                 .contentShape(Rectangle())
         }
@@ -119,8 +119,8 @@ struct HoverRow<Content: View>: View {
 
     var body: some View {
         content()
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)

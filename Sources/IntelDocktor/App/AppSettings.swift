@@ -155,7 +155,7 @@ final class AppSettings: ObservableObject {
         showMenuBarIcon = d.object(forKey: "showMenuBarIcon") as? Bool ?? true
         widgetsHidden = d.bool(forKey: "widgetsHidden")
         drawerMode = DrawerMode(rawValue: d.string(forKey: "drawerMode") ?? "") ?? (d.bool(forKey: "hoverOpensDrawer") ? .hover : .click)
-        glassTint = d.object(forKey: "glassTint") as? Double ?? 0.45
+        glassTint = d.object(forKey: "glassTint") as? Double ?? 0.2
         widgetGap = d.object(forKey: "widgetGap") as? Double ?? 8
         widgetHeight = d.object(forKey: "widgetHeight") as? Double ?? 1
         askedForAccessibility = d.bool(forKey: "askedForAccessibility")

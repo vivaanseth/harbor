@@ -42,7 +42,7 @@ enum WidgetMetrics {
         case .stats: return Spec(ideal: min(7.1 * h, 470), min: 236)
         case .weather: return Spec(ideal: min(6.2 * h, 410), min: 214)
         case .calendar: return Spec(ideal: min(6.0 * h, 400), min: 196)
-        case .timer: return Spec(ideal: min(3.4 * h, 220), min: 150)
+        case .timer: return Spec(ideal: min(2.3 * h, 180), min: 130)
         case .battery:
             let n = CGFloat(max(1, BatteryService.shared.visibleDevices.count))
             return Spec(ideal: min(n == 1 ? 3.4 * h : n * 2.35 * h, 520), min: n == 1 ? 150 : n * 112)
@@ -670,6 +670,9 @@ final class DrawerController: ObservableObject {
         guard let anchor = WidgetBarController.shared.frame(for: kind) else { return nil }
         let screen = DockMonitor.shared.state.screenFrame
         var size = DrawerMetrics.size(kind)
+        // Drawers grow out of their widget: as wide as it, never narrower than
+        // their content needs.
+        size.width = max(anchor.width, DrawerMetrics.minWidth(kind))
         if searchVisible { size.height += Self.searchBarHeight + Self.searchGap }
         var x = anchor.midX - size.width / 2
         x = min(max(x, screen.minX + 8), screen.maxX - size.width - 8)
@@ -716,14 +719,24 @@ final class DrawerController: ObservableObject {
 }
 
 enum DrawerMetrics {
+    static func minWidth(_ kind: WidgetKind) -> CGFloat {
+        switch kind {
+        case .music: return 300
+        case .timer: return 230
+        case .calendar: return 330
+        case .weather, .stats: return 340
+        case .battery: return 300
+        }
+    }
+
     @MainActor
     static func size(_ kind: WidgetKind) -> CGSize {
         switch kind {
-        case .music: return CGSize(width: 400, height: 330)
+        case .music: return CGSize(width: 300, height: 214)
         case .calendar: return CGSize(width: 410, height: 210)
         case .weather: return CGSize(width: 380, height: 282)
         case .stats: return CGSize(width: 390, height: 300)
-        case .timer: return CGSize(width: 360, height: 200)
+        case .timer: return CGSize(width: 230, height: 168)
         case .battery:
             let devices = BatteryService.shared.visibleDevices
             let rows = devices.reduce(CGFloat(0)) { $0 + ($1.components.isEmpty ? 56 : 80) }
@@ -745,8 +758,8 @@ struct DrawerContainer: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             drawerBody
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(GlassBackground(radius: Theme.drawerRadius, emphasized: true))
         }

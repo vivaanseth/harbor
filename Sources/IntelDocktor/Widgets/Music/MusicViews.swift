@@ -114,9 +114,9 @@ struct MusicDrawer: View {
         VStack(alignment: .leading, spacing: 8) {
             DrawerTabBar(tabs: tabs, selection: $settings.musicDrawerPage) {
                 if drawer.searchVisible {
-                    IconButton(symbol: "xmark", size: 15) { drawer.searchVisible = false; drawer.searchText = "" }
+                    IconButton(symbol: "xmark", size: 12) { drawer.searchVisible = false; drawer.searchText = "" }
                 } else {
-                    IconButton(symbol: "magnifyingglass", size: 15) { drawer.searchVisible = true }
+                    IconButton(symbol: "magnifyingglass", size: 12) { drawer.searchVisible = true }
                 }
             }
             Group {
@@ -150,12 +150,12 @@ private struct TrackRow: View {
     var action: (() -> Void)? = nil
 
     var body: some View {
-        HoverRow(radius: 12, action: action) {
-            HStack(spacing: 12) {
-                if showArtwork { ArtworkView(image: artwork, size: 40, radius: 8) }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(Theme.font(15, .bold)).lineLimit(1)
-                    Text(subtitle).font(Theme.font(13, .semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
+        HoverRow(radius: 9, action: action) {
+            HStack(spacing: 9) {
+                if showArtwork { ArtworkView(image: artwork, size: 30, radius: 6) }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(Theme.font(12.5, .bold)).lineLimit(1)
+                    Text(subtitle).font(Theme.font(10.5, .semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if active {
@@ -166,7 +166,7 @@ private struct TrackRow: View {
                 }
             }
         }
-        .background(active ? RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.tile) : nil)
+        .background(active ? RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.tile) : nil)
     }
 }
 

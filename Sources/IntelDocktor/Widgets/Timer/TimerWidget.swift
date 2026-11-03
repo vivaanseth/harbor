@@ -13,6 +13,8 @@ final class FocusTimer: ObservableObject {
     @Published private(set) var endDate: Date?
     @Published private(set) var pausedRemaining: TimeInterval?
     @Published private(set) var now = Date()
+    /// Focus session within a set of four.
+    @Published private(set) var session: Int
     @Published var focusMinutes: Int { didSet { defaults.set(focusMinutes, forKey: "timer.focus"); if isIdle { objectWillChange.send() } } }
     @Published var restMinutes: Int { didSet { defaults.set(restMinutes, forKey: "timer.rest") } }
 
@@ -25,6 +27,7 @@ final class FocusTimer: ObservableObject {
         pausedRemaining = defaults.object(forKey: "timer.paused") as? Double
         focusMinutes = defaults.object(forKey: "timer.focus") as? Int ?? 25
         restMinutes = defaults.object(forKey: "timer.rest") as? Int ?? 5
+        session = max(1, defaults.integer(forKey: "timer.session"))
     }
 
     func setActive(_ on: Bool) {
@@ -71,6 +74,7 @@ final class FocusTimer: ObservableObject {
     func reset() {
         endDate = nil
         pausedRemaining = nil
+        phase = .focus
         save()
     }
 
@@ -81,8 +85,15 @@ final class FocusTimer: ObservableObject {
         if let endDate, endDate <= now { advance(notify: true) }
     }
 
+    /// "Ready", "Focusing", "On a break" or "Paused".
+    var status: String {
+        if isRunning { return phase == .focus ? "Focusing" : "On a break" }
+        return isIdle ? "Ready" : "Paused"
+    }
+
     private func advance(notify: Bool) {
         let finished = label
+        if phase == .rest { session = session % 4 + 1 }
         phase = phase == .focus ? .rest : .focus
         // The next phase starts on its own, as a Pomodoro does.
         endDate = Date().addingTimeInterval(length)
@@ -100,6 +111,7 @@ final class FocusTimer: ObservableObject {
         defaults.set(phase.rawValue, forKey: "timer.phase")
         defaults.set(endDate, forKey: "timer.end")
         defaults.set(pausedRemaining, forKey: "timer.paused")
+        defaults.set(session, forKey: "timer.session")
         now = Date()
     }
 }
@@ -140,17 +152,17 @@ struct TimerBarView: View {
                         .opacity(timer.isRunning ? 1 : 0.7)
                 }
             } else {
+                // "▶ 25:00": an orange play/pause glyph and the clock.
                 HStack(spacing: 10 * s) {
-                    TimerRing(progress: timer.progress, color: phaseColor(timer.phase), lineWidth: 3.5 * s)
-                        .frame(width: 34 * s, height: 34 * s)
-                    VStack(alignment: .leading, spacing: 1 * s) {
-                        Text(timer.label).font(Theme.font(11.5 * s, .semibold)).foregroundStyle(Theme.secondary)
-                        Text(timer.clock).font(Theme.font(19 * s, .bold)).monospacedDigit()
+                    Button { timer.toggle() } label: {
+                        Image(systemName: timer.isRunning ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15 * s, weight: .bold))
+                            .foregroundStyle(timerOrange)
+                            .frame(width: 26 * s, height: 26 * s)
+                            .contentShape(Rectangle())
                     }
-                    Spacer(minLength: 4)
-                    IconButton(symbol: timer.isRunning ? "pause.fill" : "play.fill", size: 15 * s, tint: Theme.primary) {
-                        timer.toggle()
-                    }
+                    .buttonStyle(.plain)
+                    Text(timer.clock).font(Theme.font(19 * s, .bold)).monospacedDigit()
                 }
                 .padding(.horizontal, 12 * s)
             }
@@ -159,36 +171,45 @@ struct TimerBarView: View {
     }
 }
 
+private let timerOrange = Color(hex: 0xF5A04A)
+
 struct TimerDrawer: View {
     @ObservedObject private var timer = FocusTimer.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 16) {
-                ZStack {
-                    TimerRing(progress: timer.progress, color: phaseColor(timer.phase), lineWidth: 6)
-                    Image(systemName: timer.phase == .focus ? "brain.head.profile" : "cup.and.saucer.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(phaseColor(timer.phase))
-                }
-                .frame(width: 66, height: 66)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(timer.label).font(Theme.font(14, .semibold)).foregroundStyle(Theme.secondary)
-                    Text(timer.clock).font(Theme.font(32, .bold)).monospacedDigit()
-                }
-                Spacer()
+        VStack(spacing: 6) {
+            HStack(spacing: 5) {
+                Circle().fill(timerOrange).frame(width: 6, height: 6)
+                Text(timer.status).font(Theme.font(11.5, .bold)).foregroundStyle(timerOrange)
             }
-            HStack(spacing: 8) {
-                PillButton(title: timer.isRunning ? "Pause" : (timer.isIdle ? "Start" : "Resume"), prominent: true) { timer.toggle() }
-                PillButton(title: "Skip") { timer.skip() }
-                PillButton(title: "Reset") { timer.reset() }
+            Text(timer.clock).font(Theme.font(34, .bold)).monospacedDigit()
+            Text("\(timer.label) · Session \(timer.session) of 4")
+                .font(Theme.font(11, .semibold)).foregroundStyle(Theme.secondary)
+            HStack(spacing: 10) {
+                round(timer.isRunning ? "pause.fill" : "play.fill") { timer.toggle() }
+                round("forward.end.fill") { timer.skip() }
+                round("arrow.counterclockwise") { timer.reset() }
             }
-            HStack(spacing: 18) {
-                Stepper("Focus \(timer.focusMinutes) min", value: $timer.focusMinutes, in: 5...120, step: 5)
-                Stepper("Break \(timer.restMinutes) min", value: $timer.restMinutes, in: 1...60)
-            }
-            .font(Theme.font(12.5, .semibold))
-            .foregroundStyle(Theme.secondary)
+            .padding(.top, 4)
         }
+        .frame(maxWidth: .infinity)
+        .contextMenu {
+            Stepper("Focus \(timer.focusMinutes) min", value: Binding(get: { timer.focusMinutes }, set: { timer.focusMinutes = $0 }), in: 5...120, step: 5)
+            Stepper("Break \(timer.restMinutes) min", value: Binding(get: { timer.restMinutes }, set: { timer.restMinutes = $0 }), in: 1...60)
+            Button("Focus 25 · Break 5") { timer.focusMinutes = 25; timer.restMinutes = 5 }
+            Button("Focus 50 · Break 10") { timer.focusMinutes = 50; timer.restMinutes = 10 }
+        }
+    }
+
+    private func round(_ symbol: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Color.white.opacity(0.12)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
 }
