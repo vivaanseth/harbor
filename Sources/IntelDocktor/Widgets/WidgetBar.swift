@@ -78,7 +78,8 @@ enum WidgetMetrics {
     /// Fit one side's widgets into the space between the Dock and the screen edge.
     /// `configs` are ordered from the outer screen edge toward the Dock.
     @MainActor
-    static func fit(_ configs: [WidgetConfig], height h: CGFloat, available: CGFloat, gap: CGFloat) -> [SizedWidget] {
+    static func fit(_ configs: [WidgetConfig], height h: CGFloat, available: CGFloat, gap: CGFloat,
+                    fillRoom: CGFloat? = nil) -> [SizedWidget] {
         // Sizes are universal: Extra Small / Small are square tiles, Medium and up
         // are the same width for every widget, and "Fill" takes the room left.
         let fillKinds = Set(configs.filter { $0.size >= WidgetConfig.fill }.map(\.kind))
@@ -130,7 +131,8 @@ enum WidgetMetrics {
         while total() > available + 0.5 && !items.isEmpty { items.removeFirst() }
         // 5) "Fill" widgets stretch into whatever room is left.
         let fills = items.indices.filter { fillKinds.contains(items[$0].kind) && !items[$0].compact }
-        let leftover = available - total()
+        // Fill runs right to the screen edge (fillRoom), not just the safe area.
+        let leftover = (fillRoom ?? available) - total()
         if !fills.isEmpty && leftover > 0 {
             for i in fills { items[i].width += leftover / CGFloat(fills.count) }
         }
@@ -272,6 +274,12 @@ final class WidgetBarController: NSObject {
                     ? dock.frame.minX - dock.screenFrame.minX - gap * 2 - ceil(grow.left)
                     : dock.screenFrame.maxX - dock.frame.maxX - gap * 2 - ceil(grow.right)
             }
+            // Room for "Fill" widgets: up to the screen edge with a small margin.
+            func fillRoom(_ side: WidgetSide) -> CGFloat {
+                side == .left
+                    ? dock.frame.minX - dock.screenFrame.minX - gap - 4
+                    : dock.screenFrame.maxX - dock.frame.maxX - gap - 4
+            }
             func outward(_ configs: [WidgetConfig], _ side: WidgetSide) -> [WidgetConfig] {
                 side == .left ? configs : configs.reversed()
             }
@@ -288,7 +296,8 @@ final class WidgetBarController: NSObject {
                 var configs = configsBySide[side] ?? []
                 let extra = spill[side] ?? []
                 configs = side == .left ? extra.reversed() + configs : configs + extra
-                let sized = WidgetMetrics.fit(outward(configs, side), height: h, available: available(side), gap: gap)
+                let sized = WidgetMetrics.fit(outward(configs, side), height: h, available: available(side), gap: gap,
+                                              fillRoom: fillRoom(side))
                 var x = side == .left ? dock.frame.minX - gap : dock.frame.maxX + gap
                 for item in sized.reversed() { // Dock → outer edge
                     let w = round(item.width)
