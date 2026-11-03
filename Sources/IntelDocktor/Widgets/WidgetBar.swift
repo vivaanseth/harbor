@@ -43,6 +43,7 @@ enum WidgetMetrics {
         case .weather: return Spec(ideal: min(6.2 * h, 410), min: 214)
         case .calendar: return Spec(ideal: min(6.0 * h, 400), min: 196)
         case .timer: return Spec(ideal: min(2.3 * h, 180), min: 130)
+        case .stack: return SmartStack.shared.current == .stack ? Spec(ideal: h, min: h) : baseSpec(SmartStack.shared.current, height: h)
         case .battery:
             let n = CGFloat(max(1, BatteryService.shared.visibleDevices.count))
             return Spec(ideal: min(n == 1 ? 3.4 * h : n * 2.35 * h, 520), min: n == 1 ? 150 : n * 112)
@@ -60,6 +61,9 @@ enum WidgetMetrics {
             case .music: return MusicService.shared.nowPlaying != nil
             case .battery: return BatteryService.shared.visibleDevices.count > 1
             case .timer: return FocusTimer.shared.isRunning
+            case .stack:
+                let inner = SmartStack.shared.current
+                return inner != .stack && wantsWide(WidgetConfig(kind: inner, enabled: true, side: config.side, style: .auto))
             default: return true
             }
         }
@@ -171,6 +175,7 @@ final class WidgetBarController: NSObject {
         settings.$widgetsHidden.map { _ in () }.subscribe(trigger).store(in: &cancellables)
         settings.$widgetGap.map { _ in () }.subscribe(trigger).store(in: &cancellables)
         settings.$widgetHeight.map { _ in () }.subscribe(trigger).store(in: &cancellables)
+        settings.$stackKinds.map { _ in () }.subscribe(trigger).store(in: &cancellables)
         CalendarService.shared.$shouldExpand.removeDuplicates().map { _ in () }.subscribe(trigger).store(in: &cancellables)
         MusicService.shared.$nowPlaying.map { $0 != nil }.removeDuplicates().map { _ in () }
             .subscribe(trigger).store(in: &cancellables)
@@ -180,8 +185,8 @@ final class WidgetBarController: NSObject {
             .subscribe(trigger).store(in: &cancellables)
         settings.$hiddenDevices.map { _ in () }.subscribe(trigger).store(in: &cancellables)
 
-        settings.$widgets
-            .sink { [weak self] widgets in self?.updateServices(widgets) }
+        settings.$widgets.combineLatest(settings.$stackKinds)
+            .sink { [weak self] widgets, _ in self?.updateServices(widgets) }
             .store(in: &cancellables)
 
         // Restart frame-by-frame tracking the moment the pointer heads for the
@@ -204,7 +209,10 @@ final class WidgetBarController: NSObject {
     }
 
     private func updateServices(_ widgets: [WidgetConfig]) {
-        let enabled = Set(widgets.filter(\.enabled).map(\.kind))
+        var enabled = Set(widgets.filter(\.enabled).map(\.kind))
+        // A Smart Stack needs the data of every widget it holds.
+        if enabled.contains(.stack) { enabled.formUnion(settings.stackKinds) }
+        SmartStack.shared.setActive(enabled.contains(.stack))
         StatsService.shared.setActive(enabled.contains(.stats))
         BatteryService.shared.setActive(enabled.contains(.battery))
         WeatherService.shared.setActive(enabled.contains(.weather))
@@ -561,6 +569,7 @@ struct WidgetContainer: View {
         case .stats: StatsBarView(compact: model.compact, height: h, width: model.width)
         case .battery: BatteryBarView(compact: model.compact, height: h)
         case .timer: TimerBarView(compact: model.compact, height: h)
+        case .stack: SmartStackBarView(compact: model.compact, height: h, width: model.width)
         }
     }
 }
@@ -719,6 +728,7 @@ final class DrawerController: ObservableObject {
 }
 
 enum DrawerMetrics {
+    @MainActor
     static func minWidth(_ kind: WidgetKind) -> CGFloat {
         switch kind {
         case .music: return 300
@@ -726,6 +736,7 @@ enum DrawerMetrics {
         case .calendar: return 330
         case .weather, .stats: return 340
         case .battery: return 300
+        case .stack: return SmartStack.shared.current == .stack ? 300 : minWidth(SmartStack.shared.current)
         }
     }
 
@@ -737,6 +748,7 @@ enum DrawerMetrics {
         case .weather: return CGSize(width: 380, height: 282)
         case .stats: return CGSize(width: 390, height: 300)
         case .timer: return CGSize(width: 230, height: 168)
+        case .stack: return SmartStack.shared.current == .stack ? CGSize(width: 300, height: 200) : size(SmartStack.shared.current)
         case .battery:
             let devices = BatteryService.shared.visibleDevices
             let rows = devices.reduce(CGFloat(0)) { $0 + ($1.components.isEmpty ? 56 : 80) }
@@ -774,6 +786,7 @@ struct DrawerContainer: View {
         case .stats: StatsDrawer()
         case .battery: BatteryDrawer()
         case .timer: TimerDrawer()
+        case .stack: StackDrawer()
         }
     }
 
@@ -792,6 +805,23 @@ struct DrawerContainer: View {
         .onAppear {
             DrawerController.shared.focusSearch()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { searchFocused = true }
+        }
+    }
+}
+
+/// The drawer of whichever widget the Smart Stack is showing.
+struct StackDrawer: View {
+    @ObservedObject private var stack = SmartStack.shared
+
+    var body: some View {
+        switch stack.current {
+        case .music: MusicDrawer()
+        case .calendar: CalendarDrawer()
+        case .weather: WeatherDrawer()
+        case .stats: StatsDrawer()
+        case .battery: BatteryDrawer()
+        case .timer: TimerDrawer()
+        case .stack: EmptyView()
         }
     }
 }

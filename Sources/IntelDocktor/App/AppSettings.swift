@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 enum WidgetKind: String, CaseIterable, Codable, Identifiable {
-    case battery, stats, weather, music, calendar, timer
+    case battery, stats, weather, music, calendar, timer, stack
     var id: String { rawValue }
 
     var title: String {
@@ -13,6 +13,7 @@ enum WidgetKind: String, CaseIterable, Codable, Identifiable {
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .timer: return "Focus Timer"
+        case .stack: return "Smart Stack"
         }
     }
 
@@ -24,6 +25,7 @@ enum WidgetKind: String, CaseIterable, Codable, Identifiable {
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .timer: return "timer"
+        case .stack: return "square.stack.fill"
         }
     }
 }
@@ -103,6 +105,8 @@ final class AppSettings: ObservableObject {
     @Published var widgetGap: Double { didSet { save("widgetGap", widgetGap) } }
     /// Widget height as a fraction of the Dock's.
     @Published var widgetHeight: Double { didSet { save("widgetHeight", widgetHeight) } }
+    @Published var stackKinds: [WidgetKind] { didSet { saveCodable("stackKinds", stackKinds) } }
+    @Published var stackSmartRotate: Bool { didSet { save("stackSmartRotate", stackSmartRotate) } }
     @Published var askedForAccessibility: Bool { didSet { save("askedForAccessibility", askedForAccessibility) } }
 
     // Widgets
@@ -146,6 +150,7 @@ final class AppSettings: ObservableObject {
         WidgetConfig(kind: .music, enabled: true, side: .right, style: .wide),
         WidgetConfig(kind: .calendar, enabled: true, side: .right, style: .auto),
         WidgetConfig(kind: .timer, enabled: false, side: .right, style: .compact),
+        WidgetConfig(kind: .stack, enabled: false, side: .right, style: .auto),
     ]
 
     private init() {
@@ -158,6 +163,8 @@ final class AppSettings: ObservableObject {
         glassTint = d.object(forKey: "glassTint") as? Double ?? 0.2
         widgetGap = d.object(forKey: "widgetGap") as? Double ?? 8
         widgetHeight = d.object(forKey: "widgetHeight") as? Double ?? 1
+        stackKinds = Self.load("stackKinds", d) ?? [.music, .calendar, .weather, .timer]
+        stackSmartRotate = d.object(forKey: "stackSmartRotate") as? Bool ?? true
         askedForAccessibility = d.bool(forKey: "askedForAccessibility")
         widgets = Self.load("widgets", d) ?? Self.defaultWidgets
         dockPreviewsEnabled = d.object(forKey: "dockPreviewsEnabled") as? Bool ?? true

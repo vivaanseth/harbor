@@ -236,8 +236,20 @@ private struct WidgetsPane: View {
                     .onMove { settings.widgets.move(fromOffsets: $0, toOffset: $1) }
                 }
                 .listStyle(.plain)
-                .frame(height: 230)
+                .frame(height: 290)
                 Button("Restore Defaults") { settings.widgets = AppSettings.defaultWidgets }
+            }
+            Section(title: "Smart Stack", footer: "Turn on Smart Stack above, then pick what it holds. Scroll over it to flip; it turns to a running timer, an upcoming event or playing music on its own unless you flipped it in the last minute.") {
+                ForEach(WidgetKind.allCases.filter { $0 != .stack }) { kind in
+                    Toggle(isOn: Binding(
+                        get: { settings.stackKinds.contains(kind) },
+                        set: { on in
+                            if on { settings.stackKinds.append(kind) } else { settings.stackKinds.removeAll { $0 == kind } }
+                        })) {
+                        Label(kind.title, systemImage: kind.symbol)
+                    }
+                }
+                Toggle("Turn to what matters automatically", isOn: $settings.stackSmartRotate)
             }
             Section(title: "Music") {
                 Picker("Player", selection: $settings.musicSource) {
