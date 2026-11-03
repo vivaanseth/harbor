@@ -55,7 +55,9 @@ struct StatsBarView: View {
         let peakIndex = values.indices.max(by: { values[$0] < values[$1] }) ?? 0
         // Fit to the width we actually got: drop the badge, then the peak label,
         // then the chart, rather than squeezing the chart until labels wrap.
-        let fixed = 26 * s + 84 * s + 14 * s
+        // Narrow: keep the moving graph, drop the subtitle and badge first.
+        let showSubtitle = width >= 300 * s
+        let fixed = 26 * s + (showSubtitle ? 84 : 52) * s + 14 * s
         let showBadge = width - fixed - 46 * s >= 96 * s
         let chartWidth = width - fixed - (showBadge ? 46 * s : 0)
         var markers: [SparkChart.Marker] = [.init(index: values.count - 1, label: "\(pct(values.last ?? 0))%")]
@@ -79,17 +81,19 @@ struct StatsBarView: View {
                     Text(pct(stats.cpu)).font(Theme.font(22 * s, .bold))
                     Text("%").font(Theme.font(11 * s, .bold)).foregroundStyle(Theme.secondary)
                 }
+                if showSubtitle {
                 Text("RAM \(pct(stats.memFraction))% · SSD \(pct(stats.diskFraction))%")
                     .font(Theme.font(8.5 * s, .semibold))
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
                     .fixedSize()
+                }
             }
             .layoutPriority(1)
 
             Spacer(minLength: 4)
 
-            if chartWidth >= 56 * s {
+            if chartWidth >= 36 * s {
                 VStack(spacing: 0) {
                     SparkChart(values: values, lo: 0, hi: max(0.2, (values.max() ?? 0) * 1.2),
                                colors: cpuColors, lineWidth: 1.8 * s, fillOpacity: 0.22,

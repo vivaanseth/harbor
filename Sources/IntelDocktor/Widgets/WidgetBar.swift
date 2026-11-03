@@ -30,9 +30,15 @@ enum WidgetMetrics {
         return Spec(ideal: base.ideal * size, min: base.min * min(1.3, max(0.7, size)))
     }
 
-    /// Glance tiles are square at medium size.
+    /// Square tiles: Extra Small is 0.8× the Dock's height, anything else 1×.
     static func compactWidth(_ h: CGFloat, size: CGFloat) -> CGFloat {
-        round(h * min(1, max(0.65, size)))
+        round(h * (size < 0.7 ? 0.8 : 1))
+    }
+
+    /// The same width for every widget at a given size (Medium and up).
+    static func universalWidth(_ h: CGFloat, size: CGFloat) -> CGFloat {
+        let factor: CGFloat = size >= 1.8 ? 6.6 : size >= 1.5 ? 5.5 : size >= 1.25 ? 4.4 : 3.3
+        return round(h * factor)
     }
 
     @MainActor
@@ -73,20 +79,19 @@ enum WidgetMetrics {
     /// `configs` are ordered from the outer screen edge toward the Dock.
     @MainActor
     static func fit(_ configs: [WidgetConfig], height h: CGFloat, available: CGFloat, gap: CGFloat) -> [SizedWidget] {
-        // Sizes below Medium are smaller glance tiles; Medium and up scale the
-        // full layout; "Fill" takes whatever room is left on its side.
+        // Sizes are universal: Extra Small / Small are square tiles, Medium and up
+        // are the same width for every widget, and "Fill" takes the room left.
         let fillKinds = Set(configs.filter { $0.size >= WidgetConfig.fill }.map(\.kind))
         var items: [SizedWidget] = configs.map { c in
             let size = CGFloat(min(c.size, 1.8))
-            if size < 1 { return SizedWidget(kind: c.kind, width: compactWidth(h, size: size), compact: true, size: size) }
-            let wide = wantsWide(c) || fillKinds.contains(c.kind)
-            return SizedWidget(kind: c.kind, width: wide ? spec(c.kind, height: h, size: size).ideal : h,
-                               compact: !wide, size: size)
+            let fill = fillKinds.contains(c.kind)
+            let square = !fill && (size < 1 || c.style == .compact || !wantsWide(WidgetConfig(kind: c.kind, enabled: true, side: c.side, style: c.style == .wide ? .wide : .auto)))
+            if square { return SizedWidget(kind: c.kind, width: compactWidth(h, size: size), compact: true, size: size) }
+            return SizedWidget(kind: c.kind, width: universalWidth(h, size: fill ? 1 : size), compact: false, size: size)
         }
         // A "Fill" widget may squeeze well below its usual minimum to stay wide.
         func minWidth(_ item: SizedWidget) -> CGFloat {
-            let m = spec(item.kind, height: h, size: item.size).min
-            return fillKinds.contains(item.kind) ? min(m, h * 1.5) : m
+            fillKinds.contains(item.kind) ? h * 1.5 : max(h * 2.6, universalWidth(h, size: item.size) * 0.75)
         }
         func total() -> CGFloat {
             items.reduce(0) { $0 + $1.width } + gap * CGFloat(max(0, items.count - 1))

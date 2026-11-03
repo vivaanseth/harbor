@@ -151,9 +151,9 @@ final class AppSettings: ObservableObject {
     @Published var deviceOrder: [String] { didSet { saveCodable("deviceOrder", deviceOrder) } }
 
     static let defaultWidgets: [WidgetConfig] = [
-        WidgetConfig(kind: .battery, enabled: true, side: .left, style: .compact),
+        WidgetConfig(kind: .battery, enabled: true, side: .left, style: .compact, size: 0.8),
         WidgetConfig(kind: .stats, enabled: true, side: .left, style: .wide),
-        WidgetConfig(kind: .weather, enabled: true, side: .left, style: .compact),
+        WidgetConfig(kind: .weather, enabled: true, side: .left, style: .compact, size: 0.8),
         WidgetConfig(kind: .music, enabled: true, side: .right, style: .wide),
         WidgetConfig(kind: .calendar, enabled: true, side: .right, style: .auto),
         WidgetConfig(kind: .timer, enabled: false, side: .right, style: .compact),
@@ -193,6 +193,12 @@ final class AppSettings: ObservableObject {
         hiddenDevices = Self.load("hiddenDevices", d) ?? []
         pinnedDevice = d.string(forKey: "pinnedDevice")
         deviceOrder = Self.load("deviceOrder", d) ?? []
+
+        // Sizes became universal: square-layout widgets keep their look as Small.
+        if !d.bool(forKey: "sizesV2") {
+            for i in widgets.indices where widgets[i].style == .compact && widgets[i].size == 1 { widgets[i].size = 0.8 }
+            d.set(true, forKey: "sizesV2")
+        }
 
         // Make sure newly added widget kinds appear for existing installs.
         for kind in WidgetKind.allCases where !widgets.contains(where: { $0.kind == kind }) {

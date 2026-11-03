@@ -48,9 +48,9 @@ struct MusicBarView: View {
             Spacer(minLength: 6 * s)
             // Narrow (a stretched "Fill" widget in a tight spot): keep play/pause only.
             HStack(spacing: 6 * s) {
-                if width >= 230 * s { TransportButton(symbol: "backward.fill", size: 17 * s) { music.previous() } }
-                if width >= 150 * s { TransportButton(symbol: np.isPlaying ? "pause.fill" : "play.fill", size: 20 * s) { music.playPause() } }
-                if width >= 230 * s { TransportButton(symbol: "forward.fill", size: 17 * s) { music.next() } }
+                if width >= 2.9 * height { TransportButton(symbol: "backward.fill", size: 17 * s) { music.previous() } }
+                if width >= 2.0 * height { TransportButton(symbol: np.isPlaying ? "pause.fill" : "play.fill", size: 20 * s) { music.playPause() } }
+                if width >= 2.9 * height { TransportButton(symbol: "forward.fill", size: 17 * s) { music.next() } }
             }
         }
         .padding(.leading, 10 * s)
