@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Intel Docktor</string>
+	<key>CFBundleName</key>
+	<string>Intel Docktor</string>
+	<key>CFBundleExecutable</key>
+	<string>IntelDocktor</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.inteldocktor.app</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Intel Docktor controls playback and shows the current track from Apple Music and Spotify.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Intel Docktor shows your next event and today's schedule beside the Dock.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Intel Docktor shows your next event and today's schedule beside the Dock.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Intel Docktor shows the weather where you are.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Intel Docktor shows the weather where you are.</string>
+</dict>
+</plist>
