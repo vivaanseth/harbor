@@ -32,7 +32,7 @@ enum WidgetMetrics {
 
     /// Glance tiles are square at medium size.
     static func compactWidth(_ h: CGFloat, size: CGFloat) -> CGFloat {
-        round(h * min(1.8, max(0.65, size)))
+        round(h * min(1, max(0.65, size)))
     }
 
     @MainActor
@@ -73,11 +73,20 @@ enum WidgetMetrics {
     /// `configs` are ordered from the outer screen edge toward the Dock.
     @MainActor
     static func fit(_ configs: [WidgetConfig], height h: CGFloat, available: CGFloat, gap: CGFloat) -> [SizedWidget] {
+        // Sizes below Medium are smaller glance tiles; Medium and up scale the
+        // full layout; "Fill" takes whatever room is left on its side.
+        let fillKinds = Set(configs.filter { $0.size >= WidgetConfig.fill }.map(\.kind))
         var items: [SizedWidget] = configs.map { c in
-            let wide = wantsWide(c)
-            let size = CGFloat(c.size)
-            return SizedWidget(kind: c.kind, width: wide ? spec(c.kind, height: h, size: size).ideal : compactWidth(h, size: size),
+            let size = CGFloat(min(c.size, 1.8))
+            if size < 1 { return SizedWidget(kind: c.kind, width: compactWidth(h, size: size), compact: true, size: size) }
+            let wide = wantsWide(c) || fillKinds.contains(c.kind)
+            return SizedWidget(kind: c.kind, width: wide ? spec(c.kind, height: h, size: size).ideal : h,
                                compact: !wide, size: size)
+        }
+        // A "Fill" widget may squeeze well below its usual minimum to stay wide.
+        func minWidth(_ item: SizedWidget) -> CGFloat {
+            let m = spec(item.kind, height: h, size: item.size).min
+            return fillKinds.contains(item.kind) ? min(m, h * 1.5) : m
         }
         func total() -> CGFloat {
             items.reduce(0) { $0 + $1.width } + gap * CGFloat(max(0, items.count - 1))
@@ -86,12 +95,11 @@ enum WidgetMetrics {
         var excess = total() - available
         if excess > 0 {
             let shrinkable = items.indices.filter { !items[$0].compact }
-                .reduce(CGFloat(0)) { $0 + items[$1].width - spec(items[$1].kind, height: h, size: items[$1].size).min }
+                .reduce(CGFloat(0)) { $0 + items[$1].width - minWidth(items[$1]) }
             if shrinkable > 0 {
                 let ratio = min(1, excess / shrinkable)
                 for i in items.indices where !items[i].compact {
-                    let s = spec(items[i].kind, height: h, size: items[i].size)
-                    items[i].width -= (items[i].width - s.min) * ratio
+                    items[i].width -= (items[i].width - minWidth(items[i])) * ratio
                 }
             }
         }
@@ -115,6 +123,12 @@ enum WidgetMetrics {
         }
         // 4) Still too wide: drop widgets from the outer edge.
         while total() > available + 0.5 && !items.isEmpty { items.removeFirst() }
+        // 5) "Fill" widgets stretch into whatever room is left.
+        let fills = items.indices.filter { fillKinds.contains(items[$0].kind) && !items[$0].compact }
+        let leftover = available - total()
+        if !fills.isEmpty && leftover > 0 {
+            for i in fills { items[i].width += leftover / CGFloat(fills.count) }
+        }
         return items
     }
 }
@@ -563,7 +577,7 @@ struct WidgetContainer: View {
         // Glance tiles may be squeezed narrower than the Dock is tall.
         let h = model.compact ? min(model.width, model.height) : model.height
         switch model.kind {
-        case .music: MusicBarView(compact: model.compact, height: h)
+        case .music: MusicBarView(compact: model.compact, height: h, width: model.width)
         case .calendar: CalendarBarView(compact: model.compact, height: h)
         case .weather: WeatherBarView(compact: model.compact, height: h, width: model.width)
         case .stats: StatsBarView(compact: model.compact, height: h, width: model.width)

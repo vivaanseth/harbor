@@ -66,8 +66,10 @@ struct WidgetConfig: Codable, Identifiable, Equatable {
 
     static let sizes: [(String, Double)] = [
         ("Extra Small", 0.65), ("Small", 0.8), ("Medium", 1.0),
-        ("Large", 1.25), ("Extra Large", 1.5), ("Huge", 1.8),
+        ("Large", 1.25), ("Extra Large", 1.5), ("Huge", 1.8), ("Fill space", fill),
     ]
+    /// Size value meaning "take all remaining room on this side".
+    static let fill: Double = 99
     var id: WidgetKind { kind }
 
     init(kind: WidgetKind, enabled: Bool, side: WidgetSide, style: WidgetStyle, size: Double = 1) {

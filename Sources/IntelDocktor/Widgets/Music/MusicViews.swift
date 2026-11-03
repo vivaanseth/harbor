@@ -3,6 +3,7 @@ import SwiftUI
 struct MusicBarView: View {
     var compact: Bool
     var height: CGFloat
+    var width: CGFloat = 400
     @ObservedObject private var music = MusicService.shared
     @State private var hover = false
 
@@ -45,10 +46,11 @@ struct MusicBarView: View {
                 Text(np.artist).font(Theme.font(12.5 * s, .semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
             }
             Spacer(minLength: 6 * s)
+            // Narrow (a stretched "Fill" widget in a tight spot): keep play/pause only.
             HStack(spacing: 6 * s) {
-                TransportButton(symbol: "backward.fill", size: 17 * s) { music.previous() }
-                TransportButton(symbol: np.isPlaying ? "pause.fill" : "play.fill", size: 20 * s) { music.playPause() }
-                TransportButton(symbol: "forward.fill", size: 17 * s) { music.next() }
+                if width >= 230 * s { TransportButton(symbol: "backward.fill", size: 17 * s) { music.previous() } }
+                if width >= 150 * s { TransportButton(symbol: np.isPlaying ? "pause.fill" : "play.fill", size: 20 * s) { music.playPause() } }
+                if width >= 230 * s { TransportButton(symbol: "forward.fill", size: 17 * s) { music.next() } }
             }
         }
         .padding(.leading, 10 * s)
