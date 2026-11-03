@@ -12,10 +12,17 @@ private func keyTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CG
 /// The Cmd+Tab event tap, on its own thread. Every keystroke on the Mac passes
 /// through it, so it only decides swallow/pass and hands the rest to the UI.
 final class SwitcherKeyTap: @unchecked Sendable {
-    enum Action { case begin(reverse: Bool), step(Int), key(Int64, CGEventFlags), release }
+    enum Action { case begin(reverse: Bool), step(Int), key(Int64, CGEventFlags), release, tile(Int64) }
 
     private let lock = NSLock()
     private var _active = false
+    private var _switcherOn = true
+    private var _tilingOn = false
+
+    /// Which features the tap serves; set from the main thread.
+    func configure(switcher: Bool, tiling: Bool) {
+        lock.lock(); _switcherOn = switcher; _tilingOn = tiling; lock.unlock()
+    }
     private var port: CFMachPort?
     private var runLoop: CFRunLoop?
     private let onAction: @Sendable (Action) -> Void
@@ -79,6 +86,16 @@ final class SwitcherKeyTap: @unchecked Sendable {
         case .keyDown:
             let key = event.getIntegerValueField(.keyboardEventKeycode)
             let flags = event.flags
+            lock.lock()
+            let switcherOn = _switcherOn, tilingOn = _tilingOn
+            lock.unlock()
+            // ⌃⌥ + arrow: window tiling.
+            if tilingOn && (123...126).contains(key) && flags.contains(.maskControl) && flags.contains(.maskAlternate)
+                && !flags.contains(.maskCommand) && !flags.contains(.maskShift) {
+                post(.tile(key))
+                return true
+            }
+            guard switcherOn else { return false }
             if key == 48 && flags.contains(.maskCommand) && !flags.contains(.maskControl) && !flags.contains(.maskAlternate) {
                 lock.lock()
                 let wasActive = _active
@@ -151,12 +168,8 @@ final class SwitcherController: ObservableObject {
             }
             .store(in: &cancellables)
 
-        settings.$switcherEnabled
-            .removeDuplicates()
-            .sink { [weak self] on in
-                guard let self else { return }
-                if on { self.installTap() } else { self.stop() }
-            }
+        settings.$switcherEnabled.combineLatest(settings.$tilingEnabled)
+            .sink { [weak self] switcher, tiling in self?.updateTap(switcher: switcher, tiling: tiling) }
             .store(in: &cancellables)
 
         retryTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -165,8 +178,21 @@ final class SwitcherController: ObservableObject {
     }
 
     /// Keep the tap healthy; if it can't run, hand Cmd+Tab back to macOS.
+    /// The tap serves Cmd+Tab and ⌃⌥-arrow tiling; the system Cmd+Tab is only
+    /// switched off while our switcher is on.
+    private func updateTap(switcher: Bool, tiling: Bool) {
+        keyTap.configure(switcher: switcher, tiling: tiling)
+        if switcher || tiling {
+            installTap()
+            if keyTap.isRunning { SymbolicHotKeys.setNativeSwitcherEnabled(!switcher) }
+        } else {
+            stop()
+        }
+        if !switcher && active { cancel() }
+    }
+
     private func checkTap() {
-        guard settings.switcherEnabled else { return }
+        guard settings.switcherEnabled || settings.tilingEnabled else { return }
         if !PermissionCache.shared.accessibility {
             if keyTap.isRunning { stop() }
             return
@@ -182,7 +208,7 @@ final class SwitcherController: ObservableObject {
         guard !keyTap.isRunning, PermissionCache.shared.accessibility else { return }
         guard keyTap.start() else { return }
         startHotKeyWatchdog()
-        SymbolicHotKeys.setNativeSwitcherEnabled(false)
+        SymbolicHotKeys.setNativeSwitcherEnabled(!settings.switcherEnabled)
     }
 
     func stop() {
@@ -212,6 +238,8 @@ final class SwitcherController: ObservableObject {
             if active { step(delta) } else { begin(reverse: delta < 0) }
         case .release:
             if active { commit() }
+        case .tile(let key):
+            WindowTiling.shared.tile(arrowKey: key)
         case .key(let key, let flags):
             guard active else { return }
             switch key {

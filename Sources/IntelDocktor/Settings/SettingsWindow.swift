@@ -13,7 +13,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .weather: return "Weather"
         case .calendar: return "Calendar"
-        case .previews: return "Previews & Switcher"
+        case .previews: return "Previews, Switcher & Tiling"
         case .permissions: return "Permissions"
         case .about: return "About"
         }
@@ -181,7 +181,10 @@ private struct WidgetsPane: View {
         VStack(alignment: .leading, spacing: 0) {
             Section(title: "Widget bar", footer: "Widgets fill the space on either side of the Dock. When there isn't room for the full layout they switch to their compact glance style.") {
                 Toggle("Show widgets beside the Dock", isOn: Binding(get: { !settings.widgetsHidden }, set: { settings.widgetsHidden = !$0 }))
-                Toggle("Open drawers on hover", isOn: $settings.hoverOpensDrawer)
+                Picker("Open drawers", selection: $settings.drawerMode) {
+                    ForEach(DrawerMode.allCases) { Text($0.title).tag($0) }
+                }
+                .frame(width: 280)
                 HStack {
                     Text("Glass tint")
                     Slider(value: $settings.glassTint, in: 0...1).frame(width: 200)
@@ -422,6 +425,9 @@ private struct PreviewsPane: View {
             Section(title: "Cmd+Tab switcher", footer: "Hold ⌘ and press Tab to cycle apps, ↑ to move into the windows row, ←/→ to pick, release ⌘ to switch. Q quits, H hides, W closes a window, Esc cancels.") {
                 Toggle("Replace the Cmd+Tab switcher", isOn: $settings.switcherEnabled)
                 Toggle("Show window thumbnails for the highlighted app", isOn: $settings.switcherShowsWindows)
+            }
+            Section(title: "Window tiling", footer: "⌃⌥← and ⌃⌥→ snap the front window to the left or right half; press again for a third, then a fourth. ⌃⌥↑ fills the screen, ⌃⌥↓ centres the window. Needs Accessibility.") {
+                Toggle("Snap windows with ⌃⌥ and the arrow keys", isOn: $settings.tilingEnabled)
             }
         }
     }

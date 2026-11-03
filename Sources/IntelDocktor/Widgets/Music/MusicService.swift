@@ -4,6 +4,8 @@ import Combine
 enum MusicPlayer: String {
     case music = "Music"
     case spotify = "Spotify"
+    /// Any other app, through the system Now Playing service.
+    case system = "Now Playing"
 
     var bundleID: String { self == .music ? "com.apple.Music" : "com.spotify.client" }
     var isRunning: Bool { !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty }
@@ -20,6 +22,7 @@ struct NowPlaying: Equatable {
     var isPlaying: Bool
     var artworkURL: String?
     var sampledAt: Date
+    var sourcePID: pid_t = 0
 
     /// Position extrapolated from the last poll.
     func livePosition(at date: Date = Date()) -> Double {
@@ -100,8 +103,10 @@ final class MusicService: ObservableObject {
 
     private func poll() {
         let running = preferredPlayers.filter(\.isRunning)
-        if isPlayerAvailable == running.isEmpty { isPlayerAvailable = !running.isEmpty }
-        guard !running.isEmpty else {
+        // In Automatic mode, anything else that's playing (Safari, Chrome…) counts too.
+        let anyApp = settings.musicSource == "auto"
+        if !anyApp && running.isEmpty {
+            if isPlayerAvailable { isPlayerAvailable = false }
             if nowPlaying != nil { nowPlaying = nil; artwork = nil }
             return
         }
@@ -111,7 +116,22 @@ final class MusicService: ObservableObject {
                 guard let np = Self.fetchNowPlaying(p) else { continue }
                 if best == nil || (np.isPlaying && !(best!.isPlaying)) { best = np }
             }
-            Task { @MainActor in self?.apply(best) }
+            var art: Data?
+            if anyApp, best?.isPlaying != true, let (np, data) = MediaRemote.nowPlaying(),
+               np.sourcePID == 0 || !running.contains(where: { $0.bundleID == NSRunningApplication(processIdentifier: np.sourcePID)?.bundleIdentifier }),
+               best == nil || np.isPlaying {
+                best = np
+                art = data
+            }
+            let available = !running.isEmpty || best != nil
+            Task { @MainActor in
+                guard let self else { return }
+                if self.isPlayerAvailable != available { self.isPlayerAvailable = available }
+                if let art, let np = best, self.artworkCache[np.trackID] == nil, let img = NSImage(data: art) {
+                    self.artworkCache[np.trackID] = img
+                }
+                self.apply(best)
+            }
         }
     }
 
@@ -139,6 +159,8 @@ final class MusicService: ObservableObject {
         let sep = "‖"
         let source: String
         switch p {
+        case .system:
+            return MediaRemote.nowPlaying()?.0
         case .music:
             source = """
             tell application "Music"
@@ -202,7 +224,7 @@ final class MusicService: ObservableObject {
     func previous() { command("previous track") }
 
     func seek(to seconds: Double) {
-        guard let np = nowPlaying else { return }
+        guard let np = nowPlaying, np.player != .system else { return }
         run("tell application \"\(np.player.rawValue)\" to set player position to \(Int(seconds))")
     }
 
@@ -217,12 +239,21 @@ final class MusicService: ObservableObject {
     private func command(_ cmd: String) {
         let player = nowPlaying?.player ?? preferredPlayers.first(where: \.isRunning)
         guard let player else { return }
+        if player == .system {
+            MediaRemote.send(cmd == "playpause" ? .toggle : cmd == "next track" ? .next : .previous)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.poll() }
+            return
+        }
         run("tell application \"\(player.rawValue)\" to \(cmd)") { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self?.poll() }
         }
     }
 
     func openPlayer() {
+        if let np = nowPlaying, np.player == .system {
+            NSRunningApplication(processIdentifier: np.sourcePID)?.activate()
+            return
+        }
         guard let p = nowPlaying?.player ?? preferredPlayers.first(where: \.isRunning),
               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: p.bundleID) else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: .init())

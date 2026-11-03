@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 enum WidgetKind: String, CaseIterable, Codable, Identifiable {
-    case battery, stats, weather, music, calendar
+    case battery, stats, weather, music, calendar, timer
     var id: String { rawValue }
 
     var title: String {
@@ -12,6 +12,7 @@ enum WidgetKind: String, CaseIterable, Codable, Identifiable {
         case .weather: return "Weather"
         case .music: return "Music"
         case .calendar: return "Calendar"
+        case .timer: return "Focus Timer"
         }
     }
 
@@ -22,11 +23,25 @@ enum WidgetKind: String, CaseIterable, Codable, Identifiable {
         case .weather: return "cloud.sun"
         case .music: return "music.note"
         case .calendar: return "calendar"
+        case .timer: return "timer"
         }
     }
 }
 
 enum WidgetSide: String, Codable, CaseIterable { case left, right }
+
+/// How widget drawers open.
+enum DrawerMode: String, CaseIterable, Identifiable {
+    case hover, click, never
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .hover: return "Hover or click"
+        case .click: return "Click only"
+        case .never: return "Never"
+        }
+    }
+}
 
 enum WidgetStyle: String, Codable, CaseIterable {
     case compact, wide, auto
@@ -83,7 +98,7 @@ final class AppSettings: ObservableObject {
     @Published var hasLaunchedBefore: Bool { didSet { save("hasLaunchedBefore", hasLaunchedBefore) } }
     @Published var showMenuBarIcon: Bool { didSet { save("showMenuBarIcon", showMenuBarIcon) } }
     @Published var widgetsHidden: Bool { didSet { save("widgetsHidden", widgetsHidden) } }
-    @Published var hoverOpensDrawer: Bool { didSet { save("hoverOpensDrawer", hoverOpensDrawer) } }
+    @Published var drawerMode: DrawerMode { didSet { save("drawerMode", drawerMode.rawValue) } }
     @Published var glassTint: Double { didSet { save("glassTint", glassTint) } }
     @Published var widgetGap: Double { didSet { save("widgetGap", widgetGap) } }
     /// Widget height as a fraction of the Dock's.
@@ -98,6 +113,7 @@ final class AppSettings: ObservableObject {
     @Published var previewThumbHeight: Double { didSet { save("previewThumbHeight", previewThumbHeight) } }
     @Published var switcherEnabled: Bool { didSet { save("switcherEnabled", switcherEnabled) } }
     @Published var switcherShowsWindows: Bool { didSet { save("switcherShowsWindows", switcherShowsWindows) } }
+    @Published var tilingEnabled: Bool { didSet { save("tilingEnabled", tilingEnabled) } }
 
     // Weather
     @Published var useFahrenheit: Bool { didSet { save("useFahrenheit", useFahrenheit) } }
@@ -129,6 +145,7 @@ final class AppSettings: ObservableObject {
         WidgetConfig(kind: .weather, enabled: true, side: .left, style: .compact),
         WidgetConfig(kind: .music, enabled: true, side: .right, style: .wide),
         WidgetConfig(kind: .calendar, enabled: true, side: .right, style: .auto),
+        WidgetConfig(kind: .timer, enabled: false, side: .right, style: .compact),
     ]
 
     private init() {
@@ -137,7 +154,7 @@ final class AppSettings: ObservableObject {
         hasLaunchedBefore = d.bool(forKey: "hasLaunchedBefore")
         showMenuBarIcon = d.object(forKey: "showMenuBarIcon") as? Bool ?? true
         widgetsHidden = d.bool(forKey: "widgetsHidden")
-        hoverOpensDrawer = d.bool(forKey: "hoverOpensDrawer")
+        drawerMode = DrawerMode(rawValue: d.string(forKey: "drawerMode") ?? "") ?? (d.bool(forKey: "hoverOpensDrawer") ? .hover : .click)
         glassTint = d.object(forKey: "glassTint") as? Double ?? 0.45
         widgetGap = d.object(forKey: "widgetGap") as? Double ?? 8
         widgetHeight = d.object(forKey: "widgetHeight") as? Double ?? 1
@@ -147,6 +164,7 @@ final class AppSettings: ObservableObject {
         previewThumbHeight = d.object(forKey: "previewThumbHeight") as? Double ?? 170
         switcherEnabled = d.object(forKey: "switcherEnabled") as? Bool ?? true
         switcherShowsWindows = d.object(forKey: "switcherShowsWindows") as? Bool ?? true
+        tilingEnabled = d.bool(forKey: "tilingEnabled")
         useFahrenheit = d.object(forKey: "useFahrenheit") as? Bool ?? !usesMetric
         useMph = d.object(forKey: "useMph") as? Bool ?? false
         followCurrentLocation = d.object(forKey: "followCurrentLocation") as? Bool ?? true

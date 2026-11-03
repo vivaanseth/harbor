@@ -11,6 +11,10 @@ Targets **macOS 14 Sonoma+**, built natively for **Intel (x86_64)**, with option
   - **Weather**: Open-Meteo. Has Now, Hourly and 7-day pages, plus saved locations.
   - **System Stats**: CPU, RAM, SSD, GPU, disk I/O and network, with sparklines, top processes, process search and a large-file finder.
   - **Device Batteries**: your Mac's battery, Magic Mouse, Keyboard and Trackpad, and AirPods (L / R / Case).
+  - **Focus Timer** (off by default): a Pomodoro ring with focus and break lengths. It keeps counting through sleep and relaunch.
+- **Customize** in Settings → Widgets: which widgets show, the side, order, layout (Glance, Full or Automatic), size (Small, Medium or Large), widget height, and how drawers open (hover, click or never). Widgets that don't fit move to the other side of the Dock.
+- **Music from any app**: in Automatic mode, the Music widget also shows and controls what Safari, Chrome and other apps are playing.
+- **Window tiling** (off by default): ⌃⌥← / ⌃⌥→ snap the front window to a half, then a third, then a fourth. ⌃⌥↑ fills the screen and ⌃⌥↓ centers the window.
 
 ## Build
 

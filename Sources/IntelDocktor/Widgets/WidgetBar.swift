@@ -42,6 +42,7 @@ enum WidgetMetrics {
         case .stats: return Spec(ideal: min(7.1 * h, 470), min: 236)
         case .weather: return Spec(ideal: min(6.2 * h, 410), min: 214)
         case .calendar: return Spec(ideal: min(6.0 * h, 400), min: 196)
+        case .timer: return Spec(ideal: min(3.4 * h, 220), min: 150)
         case .battery:
             let n = CGFloat(max(1, BatteryService.shared.visibleDevices.count))
             return Spec(ideal: min(n == 1 ? 3.4 * h : n * 2.35 * h, 520), min: n == 1 ? 150 : n * 112)
@@ -58,6 +59,7 @@ enum WidgetMetrics {
             case .calendar: return CalendarService.shared.shouldExpand
             case .music: return MusicService.shared.nowPlaying != nil
             case .battery: return BatteryService.shared.visibleDevices.count > 1
+            case .timer: return FocusTimer.shared.isRunning
             default: return true
             }
         }
@@ -172,6 +174,8 @@ final class WidgetBarController: NSObject {
         CalendarService.shared.$shouldExpand.removeDuplicates().map { _ in () }.subscribe(trigger).store(in: &cancellables)
         MusicService.shared.$nowPlaying.map { $0 != nil }.removeDuplicates().map { _ in () }
             .subscribe(trigger).store(in: &cancellables)
+        FocusTimer.shared.$endDate.map { $0 != nil }.removeDuplicates().map { _ in () }
+            .subscribe(trigger).store(in: &cancellables)
         BatteryService.shared.$devices.map { $0.count }.removeDuplicates().map { _ in () }
             .subscribe(trigger).store(in: &cancellables)
         settings.$hiddenDevices.map { _ in () }.subscribe(trigger).store(in: &cancellables)
@@ -206,6 +210,7 @@ final class WidgetBarController: NSObject {
         WeatherService.shared.setActive(enabled.contains(.weather))
         MusicService.shared.setActive(enabled.contains(.music))
         CalendarService.shared.setActive(enabled.contains(.calendar))
+        FocusTimer.shared.setActive(enabled.contains(.timer))
     }
 
     func scheduleLayout() {
@@ -233,14 +238,30 @@ final class WidgetBarController: NSObject {
             let y = round(dock.frame.minY + (dock.frame.height - h) / 2)
             // Leave room for the Dock to grow under the pointer.
             let grow = dock.model.maxGrowth
-            for side in WidgetSide.allCases {
-                let configs = settings.widgets.filter { $0.enabled && $0.side == side }
-                // Order configs outer edge → Dock.
-                let outward = side == .left ? configs : configs.reversed()
-                let available = side == .left
+            // Fit each side; widgets that don't fit move to the other side's outer
+            // end rather than disappearing (and only vanish if neither side has room).
+            func available(_ side: WidgetSide) -> CGFloat {
+                side == .left
                     ? dock.frame.minX - dock.screenFrame.minX - gap * 2 - ceil(grow.left)
                     : dock.screenFrame.maxX - dock.frame.maxX - gap * 2 - ceil(grow.right)
-                let sized = WidgetMetrics.fit(Array(outward), height: h, available: available, gap: gap)
+            }
+            func outward(_ configs: [WidgetConfig], _ side: WidgetSide) -> [WidgetConfig] {
+                side == .left ? configs : configs.reversed()
+            }
+            var configsBySide: [WidgetSide: [WidgetConfig]] = [:]
+            for side in WidgetSide.allCases { configsBySide[side] = settings.widgets.filter { $0.enabled && $0.side == side } }
+            var spill: [WidgetSide: [WidgetConfig]] = [.left: [], .right: []]
+            for side in WidgetSide.allCases {
+                let list = outward(configsBySide[side] ?? [], side)
+                let kept = Set(WidgetMetrics.fit(list, height: h, available: available(side), gap: gap).map(\.kind))
+                spill[side == .left ? .right : .left]! += list.filter { !kept.contains($0.kind) }
+            }
+            for side in WidgetSide.allCases {
+                // Spilled widgets join at the outer edge (first to go if still too wide).
+                var configs = configsBySide[side] ?? []
+                let extra = spill[side] ?? []
+                configs = side == .left ? extra.reversed() + configs : configs + extra
+                let sized = WidgetMetrics.fit(outward(configs, side), height: h, available: available(side), gap: gap)
                 var x = side == .left ? dock.frame.minX - gap : dock.frame.maxX + gap
                 for item in sized.reversed() { // Dock → outer edge
                     let w = round(item.width)
@@ -516,11 +537,11 @@ struct WidgetContainer: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(GlassBackground(radius: radius, emphasized: drawer.openKind == model.kind || model.hovering))
             .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .onTapGesture { DrawerController.shared.toggle(model.kind) }
+            .onTapGesture { if settings.drawerMode != .never { DrawerController.shared.toggle(model.kind) } }
             .onHover { inside in
                 WidgetBarController.shared.setHoverHighlight(inside, kind: model.kind)
                 hoverTask?.cancel()
-                if inside && settings.hoverOpensDrawer && drawer.openKind != model.kind {
+                if inside && settings.drawerMode == .hover && drawer.openKind != model.kind {
                     hoverTask = Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 350_000_000)
                         if !Task.isCancelled { DrawerController.shared.open(model.kind) }
@@ -539,6 +560,7 @@ struct WidgetContainer: View {
         case .weather: WeatherBarView(compact: model.compact, height: h, width: model.width)
         case .stats: StatsBarView(compact: model.compact, height: h, width: model.width)
         case .battery: BatteryBarView(compact: model.compact, height: h)
+        case .timer: TimerBarView(compact: model.compact, height: h)
         }
     }
 }
@@ -701,6 +723,7 @@ enum DrawerMetrics {
         case .calendar: return CGSize(width: 410, height: 210)
         case .weather: return CGSize(width: 380, height: 282)
         case .stats: return CGSize(width: 390, height: 300)
+        case .timer: return CGSize(width: 360, height: 200)
         case .battery:
             let devices = BatteryService.shared.visibleDevices
             let rows = devices.reduce(CGFloat(0)) { $0 + ($1.components.isEmpty ? 56 : 80) }
@@ -737,6 +760,7 @@ struct DrawerContainer: View {
         case .weather: WeatherDrawer()
         case .stats: StatsDrawer()
         case .battery: BatteryDrawer()
+        case .timer: TimerDrawer()
         }
     }
 
