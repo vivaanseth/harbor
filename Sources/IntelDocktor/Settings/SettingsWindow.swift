@@ -222,9 +222,7 @@ private struct WidgetsPane: View {
                             .labelsHidden()
                             .frame(width: 100)
                             Picker("", selection: $config.size) {
-                                Text("Small").tag(0.8)
-                                Text("Medium").tag(1.0)
-                                Text("Large").tag(1.25)
+                                ForEach(WidgetConfig.sizes, id: \.1) { Text($0.0).tag($0.1) }
                             }
                             .labelsHidden()
                             .frame(width: 92)

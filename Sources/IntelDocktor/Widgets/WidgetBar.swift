@@ -27,12 +27,12 @@ enum WidgetMetrics {
     @MainActor
     static func spec(_ kind: WidgetKind, height h: CGFloat, size: CGFloat = 1) -> Spec {
         let base = baseSpec(kind, height: h)
-        return Spec(ideal: base.ideal * size, min: base.min * min(1, max(0.85, size)))
+        return Spec(ideal: base.ideal * size, min: base.min * min(1.3, max(0.7, size)))
     }
 
     /// Glance tiles are square at medium size.
     static func compactWidth(_ h: CGFloat, size: CGFloat) -> CGFloat {
-        round(h * min(1.2, max(0.8, size)))
+        round(h * min(1.8, max(0.65, size)))
     }
 
     @MainActor
