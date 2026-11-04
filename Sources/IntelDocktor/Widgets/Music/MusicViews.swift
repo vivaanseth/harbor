@@ -24,16 +24,15 @@ struct MusicBarView: View {
         ZStack {
             ArtworkView(image: music.artwork, size: height - 14 * s, radius: Theme.barRadius(height) - 6 * s)
             if hover || !np.isPlaying {
-                Button { music.playPause() } label: {
-                    Image(systemName: np.isPlaying ? "pause.fill" : "play.fill")
+                Button { WidgetInteraction.shared.used(); music.playPause() } label: {
+                    SwapGlyph(symbol: np.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 18 * s, weight: .semibold))
-                        .contentTransition(.symbolEffect(.replace.downUp))
-                        .animation(Motion.snappy, value: np.isPlaying)
                         .frame(width: height - 14 * s, height: height - 14 * s)
                         .background(.black.opacity(0.35))
                         .clipShape(RoundedRectangle(cornerRadius: Theme.barRadius(height) - 6 * s, style: .continuous))
                 }
                 .buttonStyle(PressableStyle(scale: 0.92))
+                .widgetControl()
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
@@ -69,10 +68,11 @@ struct MusicBarView: View {
             Spacer(minLength: 0)
             HStack(spacing: f.spacing * s) {
                 // Sized like Apple's Now Playing controls: present, not loud.
-                if f.controls == 3 { TransportButton(symbol: "backward.fill", size: 13 * s, hit: f.hit) { music.previous() } }
+                if f.controls == 3 { TransportButton(symbol: "backward.fill", size: 13 * s, hit: f.hit, nudges: true) { music.previous() } }
                 if f.controls >= 1 { TransportButton(symbol: np.isPlaying ? "pause.fill" : "play.fill", size: 16 * s, hit: f.hit) { music.playPause() } }
-                if f.controls == 3 { TransportButton(symbol: "forward.fill", size: 13 * s, hit: f.hit) { music.next() } }
+                if f.controls == 3 { TransportButton(symbol: "forward.fill", size: 13 * s, hit: f.hit, nudges: true) { music.next() } }
             }
+            .animation(Motion.smooth, value: f.controls)
         }
         .padding(.leading, (f.pad - 1) * s)
         .padding(.trailing, (f.pad + 1) * s)
@@ -99,24 +99,30 @@ private struct TransportButton: View {
     var symbol: String
     var size: CGFloat
     var hit: CGFloat = 1.9
+    /// Skip buttons give a small nudge when used; play/pause swaps glyphs instead.
+    var nudges = false
     var action: () -> Void
     @State private var hover = false
     @State private var taps = 0
 
     var body: some View {
-        Button { taps += 1; action() } label: {
-            Image(systemName: symbol)
+        Button {
+            WidgetInteraction.shared.used()
+            if nudges { taps += 1 }
+            action()
+        } label: {
+            SwapGlyph(symbol: symbol)
                 .font(.system(size: size, weight: .semibold))
-                // Play and pause morph into each other; skips give a small nudge.
-                .contentTransition(.symbolEffect(.replace.downUp))
-                .animation(Motion.snappy, value: symbol)
                 .symbolEffect(.bounce.down, options: .speed(1.4), value: taps)
                 .frame(width: size * hit, height: size * hit)
                 .background(Circle().fill(Color.white.opacity(hover ? 0.12 : 0)))
                 .contentShape(Circle())
         }
         .buttonStyle(PressableStyle(scale: 0.86))
-        .onHover { h in withAnimation(Motion.snappy) { hover = h } }
+        .onHover { h in
+            WidgetInteraction.shared.hovering(h)
+            withAnimation(Motion.snappy) { hover = h }
+        }
     }
 }
 
@@ -327,7 +333,7 @@ private struct LyricsPage: View {
                     }
                     .onChange(of: current) { _, new in
                         guard let new else { return }
-                        withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(new, anchor: .center) }
+                        withAnimation(Motion.smooth) { proxy.scrollTo(new, anchor: .center) }
                     }
                     .onAppear { if let current { proxy.scrollTo(current, anchor: .center) } }
                 }

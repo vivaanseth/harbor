@@ -43,14 +43,51 @@ enum ChartMath {
     }
 }
 
+/// Chart readings SwiftUI can interpolate, so a line glides to new values
+/// instead of jumping. A series that grew is padded with its last value, so
+/// new points slide in from the end rather than from zero.
+struct AnimatableValues: VectorArithmetic {
+    var values: [Double]
+
+    static var zero: AnimatableValues { .init(values: []) }
+    static func + (a: Self, b: Self) -> Self { combine(a, b, +) }
+    static func - (a: Self, b: Self) -> Self { combine(a, b, -) }
+    mutating func scale(by rhs: Double) { values = values.map { $0 * rhs } }
+    var magnitudeSquared: Double { values.reduce(0) { $0 + $1 * $1 } }
+
+    private static func combine(_ a: Self, _ b: Self, _ op: (Double, Double) -> Double) -> Self {
+        let n = max(a.values.count, b.values.count)
+        func at(_ v: [Double], _ i: Int) -> Double { i < v.count ? v[i] : (v.last ?? 0) }
+        return .init(values: (0..<n).map { op(at(a.values, $0), at(b.values, $0)) })
+    }
+}
+
+/// The plot area inside a chart's bounds.
+struct ChartInsets: Equatable {
+    var horizontal: CGFloat = 0
+    var top: CGFloat = 0
+    var bottom: CGFloat = 0
+
+    func rect(in r: CGRect) -> CGRect {
+        CGRect(x: r.minX + horizontal, y: r.minY + top,
+               width: max(1, r.width - horizontal * 2), height: max(1, r.height - top - bottom))
+    }
+}
+
 struct SparkLineShape: Shape {
     var values: [Double]
     var lo: Double
     var hi: Double
+    var insets = ChartInsets()
+
+    var animatableData: AnimatablePair<AnimatablePair<Double, Double>, AnimatableValues> {
+        get { .init(.init(lo, hi), .init(values: values)) }
+        set { lo = newValue.first.first; hi = newValue.first.second; values = newValue.second.values }
+    }
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        ChartMath.smooth(ChartMath.points(values, lo: lo, hi: hi, in: rect), into: &p)
+        ChartMath.smooth(ChartMath.points(values, lo: lo, hi: hi, in: insets.rect(in: rect)), into: &p)
         return p
     }
 }
@@ -59,8 +96,15 @@ struct SparkAreaShape: Shape {
     var values: [Double]
     var lo: Double
     var hi: Double
+    var insets = ChartInsets()
 
-    func path(in rect: CGRect) -> Path {
+    var animatableData: AnimatablePair<AnimatablePair<Double, Double>, AnimatableValues> {
+        get { .init(.init(lo, hi), .init(values: values)) }
+        set { lo = newValue.first.first; hi = newValue.first.second; values = newValue.second.values }
+    }
+
+    func path(in bounds: CGRect) -> Path {
+        let rect = insets.rect(in: bounds)
         let pts = ChartMath.points(values, lo: lo, hi: hi, in: rect)
         var p = Path()
         guard let first = pts.first, let last = pts.last else { return p }
@@ -98,13 +142,12 @@ struct SparkChart: View {
             let rect = CGRect(x: lineWidth, y: verticalInset, width: max(1, geo.size.width - lineWidth * 2),
                               height: max(1, geo.size.height - verticalInset - lineWidth))
             let pts = ChartMath.points(values, lo: l, hi: h, in: rect)
+            let insets = ChartInsets(horizontal: lineWidth, top: verticalInset, bottom: lineWidth)
             ZStack(alignment: .topLeading) {
-                SparkAreaShape(values: values, lo: l, hi: h)
-                    .path(in: rect)
+                SparkAreaShape(values: values, lo: l, hi: h, insets: insets)
                     .fill(LinearGradient(colors: [(colors.first ?? .white).opacity(fillOpacity), .clear],
                                          startPoint: .top, endPoint: .bottom))
-                SparkLineShape(values: values, lo: l, hi: h)
-                    .path(in: rect)
+                SparkLineShape(values: values, lo: l, hi: h, insets: insets)
                     .stroke(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
                             style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
                 ForEach(markers, id: \.self) { m in
@@ -124,6 +167,8 @@ struct SparkChart: View {
                     }
                 }
             }
+            // Glide to each new reading rather than jumping.
+            .animation(Motion.smooth, value: values)
         }
     }
 
@@ -154,6 +199,7 @@ struct ProgressTrack: View {
                           ?? AnyShapeStyle(color))
                     .frame(width: max(height, geo.size.width * CGFloat(min(max(value, 0), 1))))
             }
+            .animation(Motion.smooth, value: value)
         }
         .frame(height: height)
     }

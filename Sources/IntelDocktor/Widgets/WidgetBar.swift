@@ -622,6 +622,7 @@ struct WidgetContainer: View {
     @ObservedObject private var settings = AppSettings.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var appeared = false
+    @ObservedObject private var interaction = WidgetInteraction.shared
 
     var body: some View {
         let h = model.height
@@ -634,18 +635,38 @@ struct WidgetContainer: View {
             .opacity(appeared ? 1 : 0)
             .onAppear { withAnimation(Motion.appear) { appeared = true } }
             .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .onTapGesture { if settings.drawerMode != .never { DrawerController.shared.toggle(model.kind) } }
+            .onTapGesture { tapped() }
             .onHover { inside in
                 WidgetBarController.shared.setHoverHighlight(inside, kind: model.kind)
-                hoverTask?.cancel()
-                if inside && settings.drawerMode == .hover && drawer.openKind != model.kind {
-                    hoverTask = Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 350_000_000)
-                        if !Task.isCancelled { DrawerController.shared.open(model.kind) }
-                    }
-                }
+                if !inside { interaction.leftWidget() }
+                scheduleHoverOpen()
             }
+            // Resting on a control works the control; leaving it (without having
+            // used it) is ordinary hovering again.
+            .onChange(of: interaction.onControl) { _, _ in scheduleHoverOpen() }
             .animation(Motion.snappy, value: model.hovering)
+            .animation(Motion.content, value: model.compact)
+    }
+
+    private func tapped() {
+        let drawer = DrawerController.shared
+        guard settings.drawerMode != .never, !interaction.onControl else { return }
+        hoverTask?.cancel()
+        drawer.toggle(model.kind)
+    }
+
+    /// In hover mode, open the drawer once the pointer has rested on the widget
+    /// itself (not one of its controls) for a moment.
+    private func scheduleHoverOpen() {
+        hoverTask?.cancel()
+        guard model.hovering, settings.drawerMode == .hover, drawer.openKind != model.kind,
+              !interaction.onControl, !interaction.usedControl else { return }
+        hoverTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            if !Task.isCancelled, model.hovering, !interaction.onControl, !interaction.usedControl {
+                DrawerController.shared.open(model.kind, byHover: true)
+            }
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -678,6 +699,14 @@ final class DrawerController: ObservableObject {
     /// Where the widget sits along the drawer's bottom edge (0…1), so the
     /// drawer grows out of it.
     @Published private(set) var anchorX: CGFloat = 0.5
+    /// How small the content starts: from well inside the widget on a fresh
+    /// open, barely smaller when moving over from another widget's drawer.
+    @Published private(set) var entryScale: CGFloat = 0.86
+    /// Opened by resting the pointer on the widget: it closes again once the
+    /// pointer moves away, like a hover popover. A click pins it open.
+    private(set) var openedByHover = false
+    private var hoverWatch: Timer?
+    private var outsideSince: CFTimeInterval?
 
     private var panel: FloatingPanel?
     private var globalMonitor: Any?
@@ -697,10 +726,15 @@ final class DrawerController: ObservableObject {
     }
 
     func toggle(_ kind: WidgetKind) {
-        if openKind == kind { close() } else { open(kind) }
+        if openKind == kind {
+            // Clicking a drawer that opened on hover keeps it; the next click closes it.
+            if openedByHover { openedByHover = false } else { close() }
+        } else {
+            open(kind)
+        }
     }
 
-    func open(_ kind: WidgetKind) {
+    func open(_ kind: WidgetKind, byHover: Bool = false) {
         guard WidgetBarController.shared.frame(for: kind) != nil else { return }
         let panel = self.panel ?? makePanel()
         let switching = openKind != nil && presented
@@ -711,6 +745,13 @@ final class DrawerController: ObservableObject {
         // Start hidden, then spring in on the next pass, so the first frame
         // drawn is the small, transparent one.
         presented = false
+        entryScale = switching ? 0.97 : 0.86
+        openedByHover = byHover
+        outsideSince = nil
+        hoverWatch?.invalidate()
+        hoverWatch = byHover ? Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.closeIfPointerLeft() }
+        } : nil
         panel.setFrame(target, display: false)
         panel.host(DrawerContainer(kind: kind))
         panel.alphaValue = 1
@@ -728,6 +769,8 @@ final class DrawerController: ObservableObject {
         openKind = nil
         searchVisible = false
         removeMonitors()
+        hoverWatch?.invalidate()
+        hoverWatch = nil
         withAnimation(Motion.disappear) { presented = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             // Reopened meanwhile: keep it.
@@ -759,6 +802,23 @@ final class DrawerController: ObservableObject {
         if let anchor = WidgetBarController.shared.frame(for: kind) {
             let x = min(max((anchor.midX - target.minX) / max(target.width, 1), 0.1), 0.9)
             if abs(x - anchorX) > 0.01 { anchorX = x }
+        }
+    }
+
+    /// A hover-opened drawer closes once the pointer has been away from both
+    /// it and its widget for a moment (not while searching or once pinned).
+    private func closeIfPointerLeft() {
+        guard openedByHover, !searchVisible, let kind = openKind, let content = targetFrame(for: kind),
+              let widget = WidgetBarController.shared.frame(for: kind) else { outsideSince = nil; return }
+        let mouse = NSEvent.mouseLocation
+        // Include the gap between the widget and the drawer.
+        let bridge = CGRect(x: widget.minX, y: widget.maxY - 2, width: widget.width, height: content.minY - widget.maxY + 4)
+        if content.insetBy(dx: -6, dy: -6).contains(mouse) || widget.insetBy(dx: -4, dy: -4).contains(mouse) || bridge.contains(mouse) {
+            outsideSince = nil
+        } else if let since = outsideSince {
+            if CACurrentMediaTime() - since > 0.35 { close() }
+        } else {
+            outsideSince = CACurrentMediaTime()
         }
     }
 
@@ -872,7 +932,7 @@ struct DrawerContainer: View {
         .foregroundStyle(Theme.primary)
         .padding(EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right))
         // Grows out of its widget like a popover.
-        .scaleEffect(drawer.presented ? 1 : 0.86, anchor: UnitPoint(x: drawer.anchorX, y: 1))
+        .scaleEffect(drawer.presented ? 1 : drawer.entryScale, anchor: UnitPoint(x: drawer.anchorX, y: 1))
         .opacity(drawer.presented ? 1 : 0)
         .animation(Motion.smooth, value: drawer.searchVisible)
     }

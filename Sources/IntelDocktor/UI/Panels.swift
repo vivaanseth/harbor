@@ -66,30 +66,6 @@ extension FloatingPanel {
             setFrame(rect, display: true)
         }
     }
-
-    func fadeIn(duration: TimeInterval = 0.16) {
-        if isVisible && alphaValue == 1 { return }
-        if !isVisible { alphaValue = 0 }
-        orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = duration
-            animator().alphaValue = 1
-        }
-    }
-
-    func fadeOut(duration: TimeInterval = 0.14, completion: (() -> Void)? = nil) {
-        guard isVisible else { completion?(); return }
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = duration
-            animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            // A fade-in may have started since; only hide if we really faded out.
-            guard let self, self.alphaValue < 0.01 else { return }
-            self.orderOut(nil)
-            self.alphaValue = 1
-            completion?()
-        })
-    }
 }
 
 enum ScreenGeometry {

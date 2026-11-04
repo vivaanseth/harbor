@@ -128,6 +128,7 @@ private struct TimerRing: View {
                 .trim(from: 0, to: max(0.001, progress))
                 .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .animation(Motion.smooth, value: progress)
         }
     }
 }
@@ -155,16 +156,15 @@ struct TimerBarView: View {
             } else {
                 // "▶ 25:00": an orange play/pause glyph and the clock.
                 HStack(spacing: 10 * s) {
-                    Button { timer.toggle() } label: {
-                        Image(systemName: timer.isRunning ? "pause.fill" : "play.fill")
+                    Button { WidgetInteraction.shared.used(); timer.toggle() } label: {
+                        SwapGlyph(symbol: timer.isRunning ? "pause.fill" : "play.fill")
                             .font(.system(size: 15 * s, weight: .bold))
-                            .contentTransition(.symbolEffect(.replace.downUp))
-                            .animation(Motion.snappy, value: timer.isRunning)
                             .foregroundStyle(timerOrange)
                             .frame(width: 26 * s, height: 26 * s)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(PressableStyle())
+                    .widgetControl()
                     Text(timer.clock).font(Theme.font(19 * s, .bold)).monospacedDigit()
                         .contentTransition(.numericText(countsDown: true)).animation(Motion.content, value: timer.clock)
                 }
@@ -208,10 +208,8 @@ struct TimerDrawer: View {
 
     private func round(_ symbol: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
+            SwapGlyph(symbol: symbol)
                 .font(.system(size: 12, weight: .semibold))
-                .contentTransition(.symbolEffect(.replace.downUp))
-                .animation(Motion.snappy, value: symbol)
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(Theme.tile))
                 .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))

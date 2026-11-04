@@ -142,7 +142,7 @@ struct StatsDrawer: View {
                 } else {
                     IconButton(symbol: "magnifyingglass", size: 14) { drawer.searchVisible = true }
                     IconButton(symbol: glance ? "list.bullet" : "waveform.path.ecg", size: 14) {
-                        withAnimation(.easeInOut(duration: 0.2)) { glance.toggle() }
+                        withAnimation(Motion.smooth) { glance.toggle() }
                     }
                 }
             }

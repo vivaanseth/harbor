@@ -142,7 +142,7 @@ struct CalendarDrawer: View {
             }
             Spacer()
             IconButton(symbol: showSchedule ? "rectangle.portrait" : "list.bullet", size: 13) {
-                withAnimation(.easeInOut(duration: 0.2)) { showSchedule.toggle() }
+                withAnimation(Motion.smooth) { showSchedule.toggle() }
             }
         }
     }
@@ -196,7 +196,7 @@ struct CalendarDrawer: View {
                 Spacer()
                 if service.upcoming(after: e) != nil || offset > 0 {
                     PillButton(title: service.upcoming(after: e) == nil ? "First" : "Next") {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(Motion.smooth) {
                             offset = service.upcoming(after: e) == nil ? 0 : offset + 1
                         }
                     }

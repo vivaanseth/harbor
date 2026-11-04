@@ -67,3 +67,43 @@ extension View {
         )
     }
 }
+
+/// A glyph that swaps (play ⇄ pause) by shrinking the old one away before the
+/// new one grows in, so the two never overlap halfway through.
+struct SwapGlyph: View {
+    var symbol: String
+
+    var body: some View {
+        ZStack {
+            Image(systemName: symbol)
+                .id(symbol)
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.4).combined(with: .opacity).animation(Motion.snappy.delay(0.05)),
+                    removal: .scale(scale: 0.4).combined(with: .opacity).animation(.easeIn(duration: 0.08))))
+        }
+        .animation(Motion.snappy, value: symbol)
+    }
+}
+
+/// Tracks the pointer over controls inside bar widgets (play, skip…), so
+/// using a control never also opens or closes the widget's drawer.
+@MainActor
+final class WidgetInteraction: ObservableObject {
+    static let shared = WidgetInteraction()
+    /// The pointer is on a control.
+    @Published private(set) var onControl = false
+    /// A control was used since the pointer entered the widget: don't open
+    /// the drawer on hover until it leaves.
+    private(set) var usedControl = false
+
+    func hovering(_ inside: Bool) { if onControl != inside { onControl = inside } }
+    func used() { usedControl = true }
+    func leftWidget() { usedControl = false; onControl = false }
+}
+
+extension View {
+    /// Marks a control inside a bar widget.
+    func widgetControl() -> some View {
+        onHover { WidgetInteraction.shared.hovering($0) }
+    }
+}
