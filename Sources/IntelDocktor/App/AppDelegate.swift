@@ -78,11 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Turn On Accessibility"
-        alert.informativeText = "If Intel Docktor is already listed and switched on, that entry belongs to an earlier build and no longer applies. Select it, remove it with the − button, then choose Turn On Accessibility… again and switch on the new entry."
-        alert.addButton(withTitle: "Open System Settings")
+        alert.informativeText = "macOS isn't letting Intel Docktor use Accessibility yet. If it's already listed and switched on, that entry was saved for an earlier build and no longer applies.\n\nReset clears it. When System Settings opens, switch Intel Docktor on again."
+        alert.addButton(withTitle: "Reset and Turn On")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        Permissions.shared.request(.accessibility)
+        Permissions.shared.resetAccessibility()
     }
     @objc private func toggleWidgets() { settings.widgetsHidden.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }

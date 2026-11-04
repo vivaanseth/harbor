@@ -172,6 +172,19 @@ final class Permissions: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.refresh() }
     }
 
+    /// Clears this app's Accessibility entry, then asks again. An entry saved
+    /// for an earlier build stays listed and switched on but no longer
+    /// applies, and switching it off and on keeps the stale record.
+    func resetAccessibility() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        task.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? "com.inteldocktor.app"]
+        task.terminationHandler = { _ in
+            Task { @MainActor in self.request(.accessibility) }
+        }
+        do { try task.run() } catch { request(.accessibility) }
+    }
+
     func openSettings(_ kind: PermissionKind) {
         let url = kind == .notifications
             ? URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!
