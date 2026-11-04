@@ -84,7 +84,7 @@ final class SmartStack: ObservableObject {
 
     private func show(_ kind: WidgetKind) {
         guard kind != current else { return }
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { current = kind }
+        withAnimation(Motion.smooth) { current = kind }
         if DrawerController.shared.openKind == .stack { DrawerController.shared.open(.stack) }
         WidgetBarController.shared.scheduleLayout()
     }
@@ -111,8 +111,9 @@ struct SmartStackBarView: View {
                 }
             }
             .id(stack.current)
+            // Pages scroll up through the stack, as in Apple's Smart Stack.
             .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
-                                    removal: .move(edge: .top).combined(with: .opacity)))
+                                    removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.94))))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
 
@@ -122,6 +123,7 @@ struct SmartStackBarView: View {
                     Capsule()
                         .fill(Color.white.opacity(kind == stack.current ? 0.9 : 0.3))
                         .frame(width: 3 * s, height: (kind == stack.current ? 8 : 3) * s)
+                        .animation(Motion.snappy, value: stack.current)
                 }
             }
             .padding(.trailing, 4 * s)

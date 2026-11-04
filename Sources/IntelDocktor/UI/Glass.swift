@@ -44,48 +44,75 @@ struct VisualEffectBlur: NSViewRepresentable {
     }
 }
 
-/// The glass slab every widget, drawer and preview sits on — styled after
-/// macOS 26 Liquid Glass: a light, see-through blur, no heavy tint, a bright
-/// specular edge that catches light top-left and bottom-right, and a soft
-/// sheen across the top.
+/// Liquid Glass's two variants: see-through, or thicker for text.
+enum GlassVariant { case clear, regular }
+
+/// The glass every widget, drawer and preview sits on, after Apple's Liquid
+/// Glass. `clear` for widgets beside the Dock (the wallpaper reads through),
+/// `regular` for surfaces that carry a lot of text (drawers, previews, the
+/// switcher): a thicker blur with a dimming layer so text stays legible.
+/// Light catches the rim at the top-left and, faintly, the bottom-right; the
+/// edge brightens a little where the glass would bend light. With Reduce
+/// Transparency it turns into a solid dark surface.
 struct GlassBackground: View {
     var radius: CGFloat
     var emphasized: Bool = false
+    var variant: GlassVariant = .clear
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let tint = settings.glassTint
+        let lift: Double = emphasized ? 1 : 0
         ZStack {
-            // A thinner blur: partly transparent so the wallpaper reads through.
-            VisualEffectBlur(material: .fullScreenUI, cornerRadius: radius, alpha: 0.5 + 0.4 * tint)
-            shape.fill(Color.black.opacity(0.06 + 0.3 * tint))
-            // Sheen across the top half, like light on a curved surface.
-            shape.fill(
-                LinearGradient(stops: [
-                    .init(color: Color.white.opacity(emphasized ? 0.20 : 0.15), location: 0),
-                    .init(color: Color.white.opacity(0.04), location: 0.45),
-                    .init(color: .clear, location: 0.6),
-                    .init(color: Color.white.opacity(0.05), location: 1),
-                ], startPoint: .top, endPoint: .bottom)
-            )
+            if reduceTransparency {
+                shape.fill(Color(white: 0.17))
+            } else {
+                switch variant {
+                case .clear:
+                    // Fully blurred like real glass (a partial blur lets sharp
+                    // wallpaper detail through); the tint setting only darkens it.
+                    VisualEffectBlur(material: .fullScreenUI, cornerRadius: radius)
+                    shape.fill(Color.white.opacity(0.04 * (1 - tint)))
+                    shape.fill(Color.black.opacity(0.32 * tint))
+                case .regular:
+                    VisualEffectBlur(material: .hudWindow, cornerRadius: radius, alpha: 0.96)
+                    shape.fill(Color.black.opacity(0.16 + 0.2 * tint))
+                }
+            }
+            // A soft highlight across the top, like light on a curved surface.
+            shape.fill(LinearGradient(stops: [
+                .init(color: .white.opacity((variant == .clear ? 0.11 : 0.07) + 0.04 * lift), location: 0),
+                .init(color: .white.opacity(0.02), location: 0.4),
+                .init(color: .clear, location: 0.7),
+            ], startPoint: .top, endPoint: .bottom))
+            // The edge bends light: a faint glow just inside the rim.
+            shape.strokeBorder(Color.white.opacity(0.07 + 0.03 * lift), lineWidth: 5)
+                .blur(radius: 3)
+                .clipShape(shape)
         }
-        // Specular rim: brightest at the top-left and bottom-right corners.
         .overlay(
             shape.strokeBorder(
-                AngularGradient(colors: [
-                    Color.white.opacity(0.75), Color.white.opacity(0.18), Color.white.opacity(0.08),
-                    Color.white.opacity(0.45), Color.white.opacity(0.08), Color.white.opacity(0.18),
-                    Color.white.opacity(0.75),
+                AngularGradient(stops: [
+                    .init(color: .white.opacity(0.5 + 0.15 * lift), location: 0),
+                    .init(color: .white.opacity(0.12), location: 0.18),
+                    .init(color: .white.opacity(0.07), location: 0.32),
+                    .init(color: .white.opacity(0.28 + 0.1 * lift), location: 0.5),
+                    .init(color: .white.opacity(0.07), location: 0.68),
+                    .init(color: .white.opacity(0.12), location: 0.82),
+                    .init(color: .white.opacity(0.5 + 0.15 * lift), location: 1),
                 ], center: .center, angle: .degrees(-135)),
-                lineWidth: 1.1)
+                lineWidth: 0.8)
         )
-        .overlay(shape.inset(by: 1.1).strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+        // A hairline of shadow outside the rim keeps the edge on bright wallpapers.
+        .overlay(shape.inset(by: -0.5).stroke(Color.black.opacity(0.14), lineWidth: 0.5))
+        .animation(Motion.snappy, value: emphasized)
     }
 }
 
 extension View {
-    func glass(radius: CGFloat, emphasized: Bool = false) -> some View {
-        background(GlassBackground(radius: radius, emphasized: emphasized))
+    func glass(radius: CGFloat, emphasized: Bool = false, variant: GlassVariant = .clear) -> some View {
+        background(GlassBackground(radius: radius, emphasized: emphasized, variant: variant))
     }
 }

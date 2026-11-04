@@ -149,6 +149,7 @@ struct TimerBarView: View {
                     TimerRing(progress: timer.progress, color: phaseColor(timer.phase), lineWidth: 3.5 * s)
                         .frame(width: 42 * s, height: 42 * s)
                     Text(timer.clock).font(Theme.font(10.5 * s, .bold)).monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true)).animation(Motion.content, value: timer.clock)
                         .opacity(timer.isRunning ? 1 : 0.7)
                 }
             } else {
@@ -157,12 +158,15 @@ struct TimerBarView: View {
                     Button { timer.toggle() } label: {
                         Image(systemName: timer.isRunning ? "pause.fill" : "play.fill")
                             .font(.system(size: 15 * s, weight: .bold))
+                            .contentTransition(.symbolEffect(.replace.downUp))
+                            .animation(Motion.snappy, value: timer.isRunning)
                             .foregroundStyle(timerOrange)
                             .frame(width: 26 * s, height: 26 * s)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableStyle())
                     Text(timer.clock).font(Theme.font(19 * s, .bold)).monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true)).animation(Motion.content, value: timer.clock)
                 }
                 .padding(.horizontal, 12 * s)
             }
@@ -183,6 +187,7 @@ struct TimerDrawer: View {
                 Text(timer.status).font(Theme.font(11.5, .bold)).foregroundStyle(timerOrange)
             }
             Text(timer.clock).font(Theme.font(34, .bold)).monospacedDigit()
+                .contentTransition(.numericText(countsDown: true)).animation(Motion.content, value: timer.clock)
             Text("\(timer.label) · Session \(timer.session) of 4")
                 .font(Theme.font(11, .semibold)).foregroundStyle(Theme.secondary)
             HStack(spacing: 10) {
@@ -204,12 +209,14 @@ struct TimerDrawer: View {
     private func round(_ symbol: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .bold))
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(Color.white.opacity(0.12)))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75))
+                .font(.system(size: 12, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace.downUp))
+                .animation(Motion.snappy, value: symbol)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Theme.tile))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(scale: 0.88))
     }
 }

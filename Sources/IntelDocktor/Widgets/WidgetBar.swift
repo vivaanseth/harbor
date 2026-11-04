@@ -160,7 +160,9 @@ final class WidgetBarController: NSObject {
     /// widget plans for the narrowest it gets while giving way to the Dock,
     /// so its content doesn't change (or overflow) as it narrows.
     private struct Base { var rect: NSRect; var side: WidgetSide; var fill = false; var contentWidth: CGFloat = 0 }
-    private struct Tween { var from: NSRect; var start: CFTimeInterval; var duration: Double }
+    /// `spring`: settle like Apple's smooth spring (layout changes); otherwise
+    /// ease in and out over `duration` (keeping pace with the Dock's own slide).
+    private struct Tween { var from: NSRect; var start: CFTimeInterval; var duration: Double; var spring = false }
 
     /// One stationary window per side of the Dock. Widgets move *inside* it:
     /// moving windows is a synchronous window-server round trip (6–120 ms on
@@ -381,7 +383,7 @@ final class WidgetBarController: NSObject {
                 let compact = compactness[kind] ?? true
                 if model.compact != compact { model.compact = compact }
                 if let old = bases[kind], let shown = frames[kind], !screenChanged, old.rect != base.rect || old.side != base.side {
-                    tweens[kind] = Tween(from: shown, start: now, duration: 0.26)
+                    tweens[kind] = Tween(from: shown, start: now, duration: 0.4, spring: true)
                 }
                 bases[kind] = base
                 if frames[kind] == nil {
@@ -528,7 +530,8 @@ final class WidgetBarController: NSObject {
                 if t >= 1 {
                     tweens[kind] = nil
                 } else {
-                    rect = Self.lerp(tw.from, goal, Self.easeInOut(t))
+                    let p = tw.spring ? Motion.smoothProgress(now - tw.start, duration: tw.duration) : Self.easeInOut(t)
+                    rect = Self.lerp(tw.from, goal, p)
                     animating = true
                 }
             }
@@ -618,6 +621,7 @@ struct WidgetContainer: View {
     @ObservedObject private var drawer = DrawerController.shared
     @ObservedObject private var settings = AppSettings.shared
     @State private var hoverTask: Task<Void, Never>?
+    @State private var appeared = false
 
     var body: some View {
         let h = model.height
@@ -625,6 +629,10 @@ struct WidgetContainer: View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(GlassBackground(radius: radius, emphasized: drawer.openKind == model.kind || model.hovering))
+            // Widgets arrive the way Apple's do: a quick spring up from slightly small.
+            .scaleEffect(appeared ? 1 : 0.9)
+            .opacity(appeared ? 1 : 0)
+            .onAppear { withAnimation(Motion.appear) { appeared = true } }
             .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .onTapGesture { if settings.drawerMode != .never { DrawerController.shared.toggle(model.kind) } }
             .onHover { inside in
@@ -637,7 +645,7 @@ struct WidgetContainer: View {
                     }
                 }
             }
-            .animation(.easeOut(duration: 0.15), value: model.hovering)
+            .animation(Motion.snappy, value: model.hovering)
     }
 
     @ViewBuilder private var content: some View {
@@ -664,15 +672,23 @@ final class DrawerController: ObservableObject {
     @Published private(set) var openKind: WidgetKind?
     @Published var searchVisible = false
     @Published var searchText = ""
+    /// Whether the drawer's content is shown; it springs up from (and back
+    /// down into) its widget like a popover while the panel stays put.
+    @Published private(set) var presented = false
+    /// Where the widget sits along the drawer's bottom edge (0…1), so the
+    /// drawer grows out of it.
+    @Published private(set) var anchorX: CGFloat = 0.5
 
     private var panel: FloatingPanel?
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var keyMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
-    private var animatingUntil: CFTimeInterval = 0
-    static let searchBarHeight: CGFloat = 50
-    static let searchGap: CGFloat = 10
+    static let searchBarHeight: CGFloat = 44
+    static let searchGap: CGFloat = 8
+    /// Transparent room around the drawer for its shadow (tight at the bottom,
+    /// where it sits against its widget).
+    static let shadowInsets = NSEdgeInsets(top: 26, left: 28, bottom: 6, right: 28)
 
     private init() {
         $searchVisible.dropFirst().sink { [weak self] _ in
@@ -687,27 +703,22 @@ final class DrawerController: ObservableObject {
     func open(_ kind: WidgetKind) {
         guard WidgetBarController.shared.frame(for: kind) != nil else { return }
         let panel = self.panel ?? makePanel()
-        let switching = openKind != nil
+        let switching = openKind != nil && presented
         searchVisible = false
         searchText = ""
         openKind = kind
+        guard let target = panelFrame(for: kind) else { return }
+        // Start hidden, then spring in on the next pass, so the first frame
+        // drawn is the small, transparent one.
+        presented = false
+        panel.setFrame(target, display: false)
         panel.host(DrawerContainer(kind: kind))
-        guard let target = targetFrame(for: kind) else { return }
-        if switching {
-            panel.setFrame(target, display: true)
-            panel.orderFrontRegardless()
-        } else {
-            panel.setFrame(target.offsetBy(dx: 0, dy: -10), display: true)
-            panel.alphaValue = 0
-            panel.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
-                panel.animator().alphaValue = 1
-                panel.animator().setFrame(target, display: true)
-            }
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.openKind == kind else { return }
+            withAnimation(switching ? Motion.snappy : Motion.appear) { self.presented = true }
         }
-        animatingUntil = CACurrentMediaTime() + 0.22
         installMonitors()
         WidgetBarController.shared.wake()
     }
@@ -717,20 +728,13 @@ final class DrawerController: ObservableObject {
         openKind = nil
         searchVisible = false
         removeMonitors()
-        let end = panel.frame.offsetBy(dx: 0, dy: -8)
-        animatingUntil = CACurrentMediaTime() + 0.17
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.15
-            panel.animator().alphaValue = 0
-            panel.animator().setFrame(end, display: true)
-        }, completionHandler: { [weak self] in
-            Task { @MainActor in
-                guard let self, self.openKind == nil else { return }
-                panel.orderOut(nil)
-                panel.alphaValue = 1
-                panel.contentView = nil
-            }
-        })
+        withAnimation(Motion.disappear) { presented = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            // Reopened meanwhile: keep it.
+            guard let self, self.openKind == nil else { return }
+            panel.orderOut(nil)
+            panel.contentView = nil
+        }
         WidgetBarController.shared.wake()
     }
 
@@ -738,22 +742,32 @@ final class DrawerController: ObservableObject {
         panel?.makeKey()
     }
 
+    /// The panel only grows or shrinks (the search bar animates inside it).
     func reposition(animated: Bool = false) {
-        guard let kind = openKind, let panel else { return }
-        guard let target = targetFrame(for: kind) else { close(); return }
-        if animated { animatingUntil = CACurrentMediaTime() + 0.2 }
-        panel.setFrame(target, animated: animated, duration: 0.18)
+        follow()
     }
 
     /// Called every frame by the widget bar so the drawer rides along with its widget.
     func follow() {
-        guard let kind = openKind, let panel, CACurrentMediaTime() > animatingUntil else { return }
-        guard let target = targetFrame(for: kind) else { close(); return }
+        guard let kind = openKind, let panel else { return }
+        guard let target = panelFrame(for: kind) else { close(); return }
         if panel.frame.size != target.size {
             panel.setFrame(target, display: true)
         } else if panel.frame.origin != target.origin {
             panel.setFrameOrigin(target.origin)
         }
+        if let anchor = WidgetBarController.shared.frame(for: kind) {
+            let x = min(max((anchor.midX - target.minX) / max(target.width, 1), 0.1), 0.9)
+            if abs(x - anchorX) > 0.01 { anchorX = x }
+        }
+    }
+
+    /// The drawer's panel: its content plus room for the shadow.
+    private func panelFrame(for kind: WidgetKind) -> NSRect? {
+        guard let content = targetFrame(for: kind) else { return nil }
+        let i = Self.shadowInsets
+        return NSRect(x: content.minX - i.left, y: content.minY - i.bottom,
+                      width: content.width + i.left + i.right, height: content.height + i.top + i.bottom)
     }
 
     private func targetFrame(for kind: WidgetKind) -> NSRect? {
@@ -844,22 +858,59 @@ struct DrawerContainer: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.drawerRadius, style: .continuous)
+        let i = DrawerController.shadowInsets
         VStack(spacing: DrawerController.searchGap) {
             if drawer.searchVisible {
                 searchBar
                     .frame(height: DrawerController.searchBarHeight)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.offset(y: 12).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: .bottom)))
             }
-            drawerBody
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(GlassBackground(radius: Theme.drawerRadius, emphasized: true))
+            DrawerSurface(kind: kind)
+                .outerShadow(shape, radius: 16, y: 6, opacity: 0.32)
         }
         .foregroundStyle(Theme.primary)
+        .padding(EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right))
+        // Grows out of its widget like a popover.
+        .scaleEffect(drawer.presented ? 1 : 0.86, anchor: UnitPoint(x: drawer.anchorX, y: 1))
+        .opacity(drawer.presented ? 1 : 0)
+        .animation(Motion.smooth, value: drawer.searchVisible)
     }
 
-    @ViewBuilder private var drawerBody: some View {
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Theme.secondary)
+            TextField(kind == .stats ? "Search processes" : "Search", text: $drawer.searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .focused($searchFocused)
+        }
+        .padding(.horizontal, 16)
+        .background(GlassBackground(radius: DrawerController.searchBarHeight / 2, variant: .regular))
+        .outerShadow(Capsule(), radius: 12, y: 4, opacity: 0.25)
+        .onAppear {
+            DrawerController.shared.focusSearch()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { searchFocused = true }
+        }
+    }
+}
+
+/// A drawer's glass and contents.
+struct DrawerSurface: View {
+    let kind: WidgetKind
+
+    var body: some View {
+        content
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(GlassBackground(radius: Theme.drawerRadius, variant: .regular))
+    }
+
+    @ViewBuilder private var content: some View {
         switch kind {
         case .music: MusicDrawer()
         case .calendar: CalendarDrawer()
@@ -868,24 +919,6 @@ struct DrawerContainer: View {
         case .battery: BatteryDrawer()
         case .timer: TimerDrawer()
         case .stack: StackDrawer()
-        }
-    }
-
-    private var searchBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.secondary)
-            TextField(kind == .stats ? "Search processes" : "Search", text: $drawer.searchText)
-                .textFieldStyle(.plain)
-                .font(Theme.font(17, .semibold))
-                .focused($searchFocused)
-        }
-        .padding(.horizontal, 18)
-        .background(GlassBackground(radius: DrawerController.searchBarHeight / 2, emphasized: true))
-        .onAppear {
-            DrawerController.shared.focusSearch()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { searchFocused = true }
         }
     }
 }

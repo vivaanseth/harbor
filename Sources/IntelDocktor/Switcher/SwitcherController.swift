@@ -274,6 +274,7 @@ final class SwitcherController: ObservableObject {
         return ordered
     }
 
+
     private func begin(reverse: Bool) {
         apps = orderedApps()
         guard !apps.isEmpty else { keyTap.active = false; return }
@@ -399,28 +400,26 @@ final class SwitcherController: ObservableObject {
     }
 }
 
+/// Laid out like Apple's Cmd+Tab: one rounded panel of icons, a highlight
+/// that slides to the selected app, its name underneath. The panel itself
+/// appears and goes away at once, as Apple's does: it's used too often to
+/// animate. Above it, the selected app's windows when there are several.
 struct SwitcherView: View {
     @ObservedObject var controller: SwitcherController
+    @Namespace private var selection
 
     var body: some View {
         GeometryReader { geo in
             let apps = controller.apps
             let maxWidth = geo.size.width - 120
-            let iconSize = min(92, max(40, (maxWidth - 48) / CGFloat(max(apps.count, 1)) - 26))
-            VStack(spacing: 16) {
+            let iconSize = min(96, max(40, (maxWidth - 48) / CGFloat(max(apps.count, 1)) - 26))
+            VStack(spacing: 18) {
                 Spacer(minLength: 0)
                 if !controller.windows.isEmpty {
                     windowsCard(maxWidth: maxWidth)
-                        .transition(.opacity)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
                 }
                 iconsCard(iconSize: iconSize)
-                if controller.apps.indices.contains(controller.appIndex) {
-                    Text(controller.apps[controller.appIndex].localizedName ?? "")
-                        .font(Theme.font(24, .bold))
-                        .padding(.horizontal, 40)
-                        .frame(height: 50)
-                        .background(GlassBackground(radius: 25, emphasized: true))
-                }
                 Spacer(minLength: 0)
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -428,20 +427,23 @@ struct SwitcherView: View {
             .onTapGesture { controller.cancel() }
         }
         .foregroundStyle(Theme.primary)
-        .animation(.easeOut(duration: 0.12), value: controller.appIndex)
-        .animation(.easeOut(duration: 0.12), value: controller.windowIndex)
+        .animation(Motion.snappy, value: controller.appIndex)
+        .animation(Motion.snappy, value: controller.windowIndex)
+        .animation(Motion.smooth, value: controller.windows.map(\.id))
     }
 
     private func windowsCard(maxWidth: CGFloat) -> some View {
-        let h: CGFloat = 200
+        let h: CGFloat = 190
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
         let selected = controller.windowIndex.flatMap { controller.windows.indices.contains($0) ? controller.windows[$0] : nil }
         let app = controller.apps.indices.contains(controller.appIndex) ? controller.apps[controller.appIndex] : nil
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                if let icon = app?.icon { Image(nsImage: icon).resizable().frame(width: 30, height: 30) }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                if let icon = app?.icon { Image(nsImage: icon).resizable().frame(width: 22, height: 22) }
                 Text((selected ?? controller.windows.first)?.title.nilIfEmpty ?? app?.localizedName ?? "")
-                    .font(Theme.font(22, .bold))
+                    .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
+                    .contentTransition(.opacity)
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
@@ -451,56 +453,81 @@ struct SwitcherView: View {
                             .onTapGesture { controller.commit(window: i) }
                     }
                 }
+                .padding(4)
             }
             .frame(maxWidth: maxWidth - 60)
             .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(28)
-        .background(GlassBackground(radius: 34, emphasized: true))
+        .padding(20)
+        .background(GlassBackground(radius: 26, variant: .regular))
+        .outerShadow(shape, radius: 22, y: 10, opacity: 0.35)
     }
 
     private func thumb(_ w: WindowInfo, width: CGFloat, height: CGFloat, selected: Bool) -> some View {
-        Group {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Group {
             if let img = controller.thumbs[w.id] {
                 Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
             } else {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.06))
-                    Text(w.title).font(Theme.font(13, .semibold)).foregroundStyle(Theme.secondary).padding()
+                    shape.fill(Theme.tile)
+                    Text(w.title).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary).padding()
                 }
             }
         }
         .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .strokeBorder(Color.white.opacity(selected ? 0.75 : 0.1), lineWidth: selected ? 3 : 1))
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Color.white.opacity(0.1)),
+                                    lineWidth: selected ? 3 : 0.5))
+        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+        .scaleEffect(selected ? 1.02 : 1)
         .opacity(w.isMinimized ? 0.65 : 1)
     }
 
     private func iconsCard(iconSize: CGFloat) -> some View {
-        HStack(spacing: 14) {
-            ForEach(Array(controller.apps.enumerated()), id: \.element.processIdentifier) { i, app in
-                let selected = i == controller.appIndex
-                Image(nsImage: app.icon ?? NSImage())
-                    .resizable()
-                    .frame(width: iconSize, height: iconSize)
-                    .padding(iconSize * 0.14)
-                    .background(
-                        RoundedRectangle(cornerRadius: iconSize * 0.32, style: .continuous)
-                            .fill(Color.white.opacity(selected ? (controller.windowIndex == nil ? 0.2 : 0.1) : 0))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: iconSize * 0.32, style: .continuous)
-                            .strokeBorder(Color.white.opacity(selected && controller.windowIndex == nil ? 0.35 : 0), lineWidth: 1.5)
-                    )
-                    .opacity(app.isHidden ? 0.55 : 1)
-                    .onHover { if $0 { controller.select(app: i) } }
-                    .onTapGesture { controller.select(app: i); controller.commit() }
+        let pad = (iconSize * 0.12).rounded()
+        let cell = iconSize + pad * 2
+        let spacing: CGFloat = 4
+        let shape = RoundedRectangle(cornerRadius: (cell * 0.28 + 12).rounded(), style: .continuous)
+        let apps = controller.apps
+        let index = controller.appIndex
+        // Centre of the selected cell, from the middle of the row.
+        let offset = (CGFloat(index) - CGFloat(apps.count - 1) / 2) * (cell + spacing)
+        return VStack(spacing: 8) {
+            HStack(spacing: spacing) {
+                ForEach(Array(apps.enumerated()), id: \.element.processIdentifier) { i, app in
+                    let selected = i == index
+                    Image(nsImage: app.icon ?? NSImage())
+                        .resizable()
+                        .frame(width: iconSize, height: iconSize)
+                        .padding(pad)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: (cell * 0.24).rounded(), style: .continuous)
+                                    .fill(Color.white.opacity(controller.windowIndex == nil ? 0.17 : 0.09))
+                                    .matchedGeometryEffect(id: "selection", in: selection)
+                            }
+                        }
+                        .opacity(app.isHidden ? 0.5 : 1)
+                        .onHover { if $0 { controller.select(app: i) } }
+                        .onTapGesture { controller.select(app: i); controller.commit() }
+                }
             }
+            // The name sits under the selected icon, as in Apple's switcher.
+            Text(apps.indices.contains(index) ? (apps[index].localizedName ?? "") : "")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Theme.primary.opacity(0.9))
+                .lineLimit(1)
+                .fixedSize()
+                .offset(x: offset)
+                .frame(height: 16)
+                .contentTransition(.opacity)
         }
-        .padding(.horizontal, 30)
-        .padding(.vertical, 26)
-        .background(GlassBackground(radius: 40, emphasized: true))
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+        .background(GlassBackground(radius: (cell * 0.28 + 12).rounded(), variant: .regular))
+        .outerShadow(shape, radius: 22, y: 10, opacity: 0.35)
     }
 }
 

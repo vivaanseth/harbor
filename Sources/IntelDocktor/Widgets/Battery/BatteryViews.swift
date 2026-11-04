@@ -39,7 +39,7 @@ struct BatteryBarView: View {
                 }
             }
             .frame(height: 20 * s)
-            Text(percent(d.level)).font(Theme.font(12 * s, .bold))
+            Text(percent(d.level)).font(Theme.font(12 * s, .bold)).rollingNumber(d.level)
         }
     }
 
@@ -65,7 +65,7 @@ struct BatteryBarView: View {
             HStack(spacing: 5 * s) {
                 Image(systemName: d.symbol).font(.system(size: 13 * s, weight: .semibold)).foregroundStyle(Theme.secondary)
                 Text(d.name).font(Theme.font(15 * s, .bold)).foregroundStyle(Theme.secondary).lineLimit(1)
-                Text(percent(d.level)).font(Theme.font(15 * s, .bold))
+                Text(percent(d.level)).font(Theme.font(15 * s, .bold)).rollingNumber(d.level)
             }
             HStack(spacing: 7 * s) {
                 ForEach(d.components, id: \.self) { c in
@@ -93,7 +93,7 @@ struct BatteryBarView: View {
                     Text(d.name).font(Theme.font(14 * s, .bold)).foregroundStyle(Theme.secondary).lineLimit(1)
                     Spacer(minLength: 4)
                 }
-                Text(percent(d.level)).font(Theme.font(15 * s, .bold))
+                Text(percent(d.level)).font(Theme.font(15 * s, .bold)).rollingNumber(d.level)
             }
             ProgressTrack(value: d.level, color: Theme.batteryColor(d.level), height: 3.5 * s)
         }

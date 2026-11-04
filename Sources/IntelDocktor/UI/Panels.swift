@@ -58,7 +58,8 @@ extension FloatingPanel {
         if animated && isVisible {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = duration
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                // Close to Apple's smooth spring: quick to start, long gentle settle.
+                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
                 animator().setFrame(rect, display: true)
             }
         } else {

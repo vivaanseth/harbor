@@ -1,31 +1,62 @@
 import SwiftUI
 
 enum Theme {
-    static let mint = Color(red: 0.18, green: 0.91, blue: 0.56)
-    static let cyan = Color(red: 0.16, green: 0.78, blue: 0.95)
-    static let teal = Color(red: 0.13, green: 0.84, blue: 0.74)
-    static let calendarRed = Color(red: 0.91, green: 0.15, blue: 0.29)
-    static let countdownPink = Color(red: 1.0, green: 0.24, blue: 0.55)
-    static let warmOrange = Color(red: 1.0, green: 0.55, blue: 0.16)
-    static let sunYellow = Color(red: 1.0, green: 0.80, blue: 0.20)
-    static let memoryPink = Color(red: 0.93, green: 0.30, blue: 0.80)
-    static let storagePurple = Color(red: 0.62, green: 0.36, blue: 0.98)
-    static let netBlue = Color(red: 0.25, green: 0.55, blue: 1.0)
+    // Apple's system colors, dark-appearance values.
+    static let red = Color(hex: 0xFF453A)
+    static let orange = Color(hex: 0xFF9F0A)
+    static let yellow = Color(hex: 0xFFD60A)
+    static let green = Color(hex: 0x30D158)
+    static let systemMint = Color(hex: 0x63E6E2)
+    static let systemTeal = Color(hex: 0x40CBE0)
+    static let systemCyan = Color(hex: 0x64D2FF)
+    static let blue = Color(hex: 0x0A84FF)
+    static let indigo = Color(hex: 0x5E5CE6)
+    static let purple = Color(hex: 0xBF5AF2)
+    static let pink = Color(hex: 0xFF375F)
+    /// The accent color chosen in System Settings.
+    static var accent: Color { Color(nsColor: .controlAccentColor) }
 
+    // Roles used across the widgets, mapped onto the system palette.
+    static let mint = green
+    static let cyan = systemCyan
+    static let teal = systemMint
+    static let calendarRed = red
+    static let countdownPink = pink
+    static let warmOrange = orange
+    static let sunYellow = yellow
+    static let memoryPink = purple
+    static let storagePurple = indigo
+    static let netBlue = blue
+
+    // Labels and fills as Apple's dark appearance defines them, nudged up a
+    // little because they sit on see-through glass rather than a solid window.
     static let primary = Color.white
-    static let secondary = Color.white.opacity(0.62)
-    static let tertiary = Color.white.opacity(0.38)
-    static let tile = Color.white.opacity(0.07)
-    static let tileHover = Color.white.opacity(0.13)
-    static let separator = Color.white.opacity(0.14)
-    static let track = Color.white.opacity(0.14)
+    static let secondary = Color.white.opacity(0.6)
+    static let tertiary = Color.white.opacity(0.34)
+    static let tile = Color(red: 0.47, green: 0.47, blue: 0.5).opacity(0.18)
+    static let tileHover = Color(red: 0.47, green: 0.47, blue: 0.5).opacity(0.3)
+    static let separator = Color.white.opacity(0.12)
+    static let track = Color(red: 0.47, green: 0.47, blue: 0.5).opacity(0.32)
 
-    /// Corner radius used by bar widgets, scaled to the Dock's height.
-    static func barRadius(_ height: CGFloat) -> CGFloat { max(14, height * 0.29) }
-    static let drawerRadius: CGFloat = 26
+    /// Corner radius of bar widgets: the Dock's own (measured on Sonoma), so
+    /// widgets beside it read as part of the same family.
+    static func barRadius(_ height: CGFloat) -> CGFloat { max(10, (height * 0.215).rounded()) }
+    /// Popover-like surfaces, from Apple's widget and Control Center sizes.
+    static let drawerRadius: CGFloat = 22
 
+    /// SF Pro. Apple sets widget type a step lighter than "bold" (values
+    /// semibold, labels medium); small text keeps its weight so it stays legible.
     static func font(_ size: CGFloat, _ weight: Font.Weight = .semibold) -> Font {
-        .system(size: size, weight: weight, design: .default)
+        .system(size: size, weight: size >= 12 ? lighter(weight) : weight, design: .default)
+    }
+
+    private static func lighter(_ w: Font.Weight) -> Font.Weight {
+        switch w {
+        case .black, .heavy: return .bold
+        case .bold: return .semibold
+        case .semibold: return .medium
+        default: return w
+        }
     }
 
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .medium) -> Font {
@@ -36,10 +67,11 @@ enum Theme {
         .system(size: size, weight: weight, design: .rounded)
     }
 
+    /// As the Batteries widget colors it: red when low, green otherwise.
     static func batteryColor(_ level: Double) -> Color {
-        if level < 0.15 { return Color(red: 1, green: 0.27, blue: 0.3) }
-        if level < 0.3 { return sunYellow }
-        return mint
+        if level <= 0.2 { return red }
+        if level < 0.3 { return yellow }
+        return green
     }
 }
 

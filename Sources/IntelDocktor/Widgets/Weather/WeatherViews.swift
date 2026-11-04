@@ -37,12 +37,15 @@ struct WeatherBarView: View {
     }
 
     private func compactBody(_ data: WeatherData, _ s: CGFloat) -> some View {
-        VStack(spacing: 2 * s) {
+        // Like Apple's Weather widget: a full-color symbol over the temperature.
+        VStack(spacing: 1 * s) {
             Image(systemName: data.current.condition.symbol)
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(size: 19 * s, weight: .semibold))
+                .symbolRenderingMode(.multicolor)
+                .font(.system(size: 19 * s, weight: .medium))
+                .contentTransition(.symbolEffect(.replace))
                 .frame(height: 22 * s)
-            Text(deg(data.current.temperature)).font(Theme.font(16 * s, .bold))
+            Text("\(deg(data.current.temperature))°").font(Theme.font(16 * s, .medium))
+                .rollingNumber(data.current.temperature)
         }
     }
 
@@ -58,15 +61,19 @@ struct WeatherBarView: View {
         }
         let lo = temps.min() ?? 0, hi = temps.max() ?? 1
         return HStack(spacing: 10 * s) {
-            SymbolTile(symbol: data.current.condition.symbol, size: 36 * s, symbolSize: 17 * s)
+            Image(systemName: data.current.condition.symbol)
+                .symbolRenderingMode(.multicolor)
+                .font(.system(size: 24 * s, weight: .medium))
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 36 * s, height: 36 * s)
             VStack(alignment: .leading, spacing: 1 * s) {
-                HStack(alignment: .firstTextBaseline, spacing: 4 * s) {
-                    Text(deg(data.current.temperature)).font(Theme.font(21 * s, .bold))
-                    Text(weather.unitSymbol).font(Theme.font(11 * s, .bold)).foregroundStyle(Theme.secondary)
-                    Text(data.current.condition.description).font(Theme.font(12 * s, .semibold))
+                HStack(alignment: .firstTextBaseline, spacing: 5 * s) {
+                    Text("\(deg(data.current.temperature))°").font(Theme.font(21 * s, .medium))
+                        .rollingNumber(data.current.temperature)
+                    Text(data.current.condition.description).font(Theme.font(12 * s, .medium))
                         .foregroundStyle(Theme.secondary).lineLimit(1)
                 }
-                Text(weather.placeName).font(Theme.font(11 * s, .semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
+                Text(weather.placeName).font(Theme.font(11 * s, .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
             }
             .fixedSize()
             Spacer(minLength: 4)
@@ -79,7 +86,7 @@ struct WeatherBarView: View {
                     HStack {
                         Text("Now").fixedSize(); Spacer(minLength: 2); Text(hourLabel(hours.last!.time, data.timeZone)).fixedSize()
                     }
-                    .font(Theme.font(7.5 * s, .bold))
+                    .font(Theme.font(8 * s, .semibold))
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
                 }

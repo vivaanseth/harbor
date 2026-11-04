@@ -12,12 +12,14 @@ struct DrawerTabBar<Trailing: View>: View {
     var tabs: [DrawerTab]
     @Binding var selection: String
     @ViewBuilder var trailing: () -> Trailing
+    @Namespace private var pill
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(tabs) { tab in
-                TabButton(tab: tab, selected: tab.id == selection) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { selection = tab.id }
+                // The highlight slides from tab to tab rather than fading.
+                TabButton(tab: tab, selected: tab.id == selection, pill: pill) {
+                    withAnimation(Motion.snappy) { selection = tab.id }
                 }
             }
             Spacer(minLength: 4)
@@ -36,33 +38,41 @@ extension DrawerTabBar where Trailing == EmptyView {
 private struct TabButton: View {
     var tab: DrawerTab
     var selected: Bool
+    var pill: Namespace.ID
     var action: () -> Void
     @State private var hover = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: tab.symbol)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .medium))
+                    .symbolVariant(selected ? .fill : .none)
                     .frame(width: 15)
                 if selected {
                     Text(tab.label)
-                        .font(Theme.font(12, .bold))
+                        .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                         .fixedSize()
+                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                 }
             }
-            .foregroundStyle(selected ? Theme.primary : Theme.secondary)
-            .padding(.horizontal, selected ? 9 : 7)
+            .foregroundStyle(selected ? Theme.primary : (hover ? Theme.primary.opacity(0.85) : Theme.secondary))
+            .padding(.horizontal, selected ? 10 : 7)
             .frame(height: 26)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(selected ? Color.white.opacity(0.12) : (hover ? Color.white.opacity(0.06) : .clear))
-            )
-            .contentShape(Rectangle())
+            .background {
+                if selected {
+                    Capsule().fill(Color.white.opacity(0.14))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+                        .matchedGeometryEffect(id: "pill", in: pill)
+                } else if hover {
+                    Capsule().fill(Color.white.opacity(0.06))
+                }
+            }
+            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
+        .buttonStyle(PressableStyle(scale: 0.94))
+        .onHover { h in withAnimation(Motion.snappy) { hover = h } }
         .help(tab.label)
     }
 }
@@ -77,14 +87,14 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: size, weight: .semibold))
+                .font(.system(size: size, weight: .medium))
                 .foregroundStyle(hover ? Theme.primary : tint)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(hover ? Color.white.opacity(0.08) : .clear))
-                .contentShape(Rectangle())
+                .background(Circle().fill(hover ? Color.white.opacity(0.1) : .clear))
+                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
+        .buttonStyle(PressableStyle(scale: 0.88))
+        .onHover { h in withAnimation(Motion.snappy) { hover = h } }
     }
 }
 
@@ -98,21 +108,23 @@ struct PillButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(Theme.font(14, .bold))
-                .foregroundStyle(prominent ? Theme.primary : Theme.secondary)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.primary.opacity(prominent ? 1 : 0.85))
                 .padding(.horizontal, 14)
-                .frame(height: 30)
-                .background(Capsule().fill(Color.black.opacity(hover ? 0.42 : 0.3)))
+                .frame(height: 28)
+                // Prominent buttons take the accent color, like Apple's.
+                .background(Capsule().fill(prominent ? AnyShapeStyle(Theme.accent.opacity(hover ? 1 : 0.9))
+                                                     : AnyShapeStyle(Color.white.opacity(hover ? 0.18 : 0.12))))
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .onHover { hover = $0 }
+        .buttonStyle(PressableStyle(scale: 0.95))
+        .onHover { h in withAnimation(Motion.snappy) { hover = h } }
     }
 }
 
 /// Row that lights up on hover, used by lists inside drawers.
 struct HoverRow<Content: View>: View {
-    var radius: CGFloat = 12
+    var radius: CGFloat = 10
     var action: (() -> Void)? = nil
     @ViewBuilder var content: () -> Content
     @State private var hover = false
@@ -127,7 +139,7 @@ struct HoverRow<Content: View>: View {
                     .fill(hover ? Theme.tileHover : .clear)
             )
             .contentShape(Rectangle())
-            .onHover { hover = $0 }
+            .onHover { h in withAnimation(Motion.snappy) { hover = h } }
             .onTapGesture { action?() }
     }
 }
@@ -161,14 +173,14 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 26, weight: .semibold))
+                .font(.system(size: 26, weight: .regular))
                 .foregroundStyle(Theme.tertiary)
             Text(title)
-                .font(Theme.font(14, .bold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.secondary)
             if let message {
                 Text(message)
-                    .font(Theme.font(12, .medium))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(Theme.tertiary)
                     .multilineTextAlignment(.center)
             }

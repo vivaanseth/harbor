@@ -10,6 +10,10 @@ final class PreviewModel: ObservableObject {
     @Published var thumbs: [CGWindowID: NSImage] = [:]
     @Published var thumbHeight: CGFloat = 170
     @Published var hovered: CGWindowID?
+    /// Content shown; it springs up from the Dock icon like a popover.
+    @Published var presented = false
+    /// Where the hovered Dock icon sits along the panel's bottom edge (0…1).
+    @Published var anchorX: CGFloat = 0.5
 }
 
 /// Watches which Dock icon is under the pointer and shows that app's windows.
@@ -148,20 +152,18 @@ final class DockPreviewController {
 
         let panel = self.panel ?? makePanel()
         let frame = panelFrame(for: windows)
-        if panel.isVisible {
-            panel.setFrame(frame, animated: !sameApp, duration: 0.14)
-            if panel.alphaValue < 1 {
-                // Caught mid fade-out: bring it back instead of letting it vanish.
-                NSAnimationContext.runAnimationGroup { $0.duration = 0.1; panel.animator().alphaValue = 1 }
-            }
+        model.anchorX = min(max((currentItemFrame.midX - frame.minX) / max(frame.width, 1), 0.1), 0.9)
+        if panel.isVisible && model.presented {
+            // Moving to another icon: glide over and resize.
+            panel.setFrame(frame, animated: !sameApp, duration: 0.24)
         } else {
-            panel.setFrame(frame.offsetBy(dx: 0, dy: -6), display: true)
-            panel.alphaValue = 0
+            // Arriving (or caught leaving): spring up from the icon.
+            if !panel.isVisible { model.presented = false }
+            panel.setFrame(frame, display: false)
+            panel.alphaValue = 1
             panel.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.16
-                panel.animator().alphaValue = 1
-                panel.animator().setFrame(frame, display: true)
+            DispatchQueue.main.async { [weak self] in
+                withAnimation(Motion.appear) { self?.model.presented = true }
             }
         }
         startTracking()
@@ -198,6 +200,12 @@ final class DockPreviewController {
         }
     }
 
+    static let cardSpacing: CGFloat = 14
+    static let padding: CGFloat = 14
+    /// Title row plus the space under it.
+    static let headerHeight: CGFloat = 30
+    static let shadowInsets = NSEdgeInsets(top: 24, left: 26, bottom: 8, right: 26)
+
     static func cardWidth(for w: WindowInfo, height: CGFloat) -> CGFloat {
         let aspect = min(max(w.frame.width / max(w.frame.height, 1), 0.65), 2.1)
         return max(150, height * aspect)
@@ -207,14 +215,17 @@ final class DockPreviewController {
         let dock = DockMonitor.shared.state
         let screen = dock.screenFrame.isEmpty ? (NSScreen.main?.frame ?? .zero) : dock.screenFrame
         let h = model.thumbHeight
-        let spacing: CGFloat = 14, pad: CGFloat = 16
+        let spacing = Self.cardSpacing, pad = Self.padding
         let content = windows.reduce(CGFloat(0)) { $0 + Self.cardWidth(for: $1, height: h) } + spacing * CGFloat(windows.count - 1)
         let width = min(content + pad * 2, screen.width - 40)
-        let height = h + 36 + pad * 2 + 6
+        let height = h + Self.headerHeight + pad * 2
         var x = currentItemFrame.midX - width / 2
         x = min(max(x, screen.minX + 12), screen.maxX - width - 12)
         let y = max(dock.frame.maxY, min(currentItemFrame.maxY, dock.frame.maxY + 40)) + 10
-        return NSRect(x: round(x), y: round(y), width: round(width), height: round(height))
+        // Plus transparent room for the shadow.
+        let i = Self.shadowInsets
+        return NSRect(x: round(x) - i.left, y: round(y) - i.bottom,
+                      width: round(width) + i.left + i.right, height: round(height) + i.top + i.bottom)
     }
 
     // MARK: - Hiding
@@ -272,8 +283,13 @@ final class DockPreviewController {
         guard let panel, panel.isVisible else { return }
         if immediately {
             panel.orderOut(nil)
+            model.presented = false
         } else {
-            panel.fadeOut(duration: 0.12)
+            withAnimation(Motion.disappear) { model.presented = false }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { [weak self] in
+                guard let self, !self.model.presented else { return }
+                panel.orderOut(nil)
+            }
         }
         model.hovered = nil
     }
@@ -286,8 +302,10 @@ struct DockPreviewView: View {
     var onMinimize: (WindowInfo) -> Void
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.drawerRadius, style: .continuous)
+        let i = DockPreviewController.shadowInsets
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: DockPreviewController.cardSpacing) {
                 ForEach(model.windows) { w in
                     WindowCard(window: w, appIcon: model.app?.icon, appName: model.app?.localizedName ?? "",
                                thumb: model.thumbs[w.id], height: model.thumbHeight,
@@ -299,14 +317,21 @@ struct DockPreviewView: View {
                         }
                 }
             }
-            .padding(16)
+            .padding(DockPreviewController.padding)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(GlassBackground(radius: 24, emphasized: true))
+        .background(GlassBackground(radius: Theme.drawerRadius, variant: .regular))
+        .outerShadow(shape, radius: 16, y: 6, opacity: 0.32)
+        .padding(EdgeInsets(top: i.top, leading: i.left, bottom: i.bottom, trailing: i.right))
+        .scaleEffect(model.presented ? 1 : 0.88, anchor: UnitPoint(x: model.anchorX, y: 1))
+        .opacity(model.presented ? 1 : 0)
         .environment(\.colorScheme, .dark)
     }
 }
 
+/// One window, as macOS draws it: 10 pt corners, the title above, the
+/// accent-colored ring Mission Control uses for the one you're pointing at,
+/// and real close / minimize buttons on hover.
 struct WindowCard: View {
     var window: WindowInfo
     var appIcon: NSImage?
@@ -321,71 +346,86 @@ struct WindowCard: View {
     var onMinimize: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
                 if let appIcon {
-                    Image(nsImage: appIcon).resizable().frame(width: 22, height: 22)
+                    Image(nsImage: appIcon).resizable().frame(width: 16, height: 16)
                 }
                 Text(window.title.isEmpty ? appName : window.title)
-                    .font(Theme.font(14, .bold))
-                    .foregroundStyle(Theme.primary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.primary.opacity(highlighted ? 1 : 0.8))
                     .lineLimit(1)
                 if window.isMinimized {
-                    Image(systemName: "minus.circle").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.tertiary)
+                    Image(systemName: "minus.circle.fill").font(.system(size: 10)).foregroundStyle(Theme.tertiary)
                 } else if !window.isOnScreen {
-                    Image(systemName: "rectangle.on.rectangle").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.tertiary)
+                    Image(systemName: "rectangle.on.rectangle").font(.system(size: 10)).foregroundStyle(Theme.tertiary)
                 }
                 Spacer(minLength: 0)
             }
-            .frame(width: width, height: 26)
+            .frame(width: width, height: 22)
 
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .topLeading) {
                 Group {
                     if let thumb {
                         Image(nsImage: thumb)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .transition(.opacity)
                     } else {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.06))
+                            shape.fill(Theme.tile)
                             if let appIcon {
-                                Image(nsImage: appIcon).resizable().frame(width: 56, height: 56).opacity(0.85)
+                                Image(nsImage: appIcon).resizable().frame(width: 48, height: 48).opacity(0.8)
                             }
                         }
                     }
                 }
                 .frame(width: width, height: height)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(shape)
                 .opacity(window.isMinimized ? 0.6 : 1)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(highlighted ? 0.55 : 0.12), lineWidth: highlighted ? 2 : 1)
-                )
+                .overlay(shape.strokeBorder(highlighted ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Color.white.opacity(0.1)),
+                                            lineWidth: highlighted ? 2.5 : 0.5))
+                .shadow(color: .black.opacity(highlighted ? 0.32 : 0.18), radius: highlighted ? 10 : 4, y: highlighted ? 5 : 2)
                 if highlighted && showControls && window.ax != nil {
-                    HStack(spacing: 6) {
-                        controlButton("minus", onMinimize)
-                        controlButton("xmark", onClose)
+                    HStack(spacing: 8) {
+                        TrafficLight(color: Color(hex: 0xFF5F57), symbol: "xmark", action: onClose)
+                        TrafficLight(color: Color(hex: 0xFEBC2E), symbol: "minus", action: onMinimize)
                     }
-                    .padding(8)
-                    .transition(.opacity)
+                    .padding(10)
+                    .transition(.opacity.combined(with: .scale(scale: 0.7, anchor: .topLeading)))
                 }
             }
+            .animation(Motion.content, value: thumb != nil)
         }
-        .scaleEffect(highlighted ? 1.015 : 1)
-        .animation(.easeOut(duration: 0.12), value: highlighted)
+        .scaleEffect(highlighted ? 1.02 : 1)
+        .animation(Motion.snappy, value: highlighted)
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
     }
+}
 
-    private func controlButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {
+/// A window's close / minimize button, glyph shown on hover as on a real window.
+private struct TrafficLight: View {
+    var color: Color
+    var symbol: String
+    var action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 9, weight: .heavy))
-                .foregroundStyle(.white)
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(Color.black.opacity(0.55)))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
+            ZStack {
+                Circle().fill(color)
+                Circle().strokeBorder(Color.black.opacity(0.2), lineWidth: 0.5)
+                Image(systemName: symbol)
+                    .font(.system(size: 7.5, weight: .bold))
+                    .foregroundStyle(.black.opacity(0.55))
+                    .opacity(hover ? 1 : 0)
+            }
+            .frame(width: 13, height: 13)
+            .contentShape(Circle().inset(by: -3))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(scale: 0.85))
+        .onHover { hover = $0 }
     }
 }

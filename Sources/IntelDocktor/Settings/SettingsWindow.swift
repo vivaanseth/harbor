@@ -13,7 +13,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .weather: return "Weather"
         case .calendar: return "Calendar"
-        case .previews: return "Previews, Switcher & Tiling"
+        case .previews: return "Windows"
         case .permissions: return "Permissions"
         case .about: return "About"
         }
@@ -94,20 +94,16 @@ struct SettingsRootView: View {
             }
             .navigationSplitViewColumnWidth(200)
         } detail: {
-            ScrollView {
-                Group {
-                    switch controller.tab {
-                    case .welcome: WelcomePane()
-                    case .widgets: WidgetsPane()
-                    case .weather: WeatherPane()
-                    case .calendar: CalendarPane()
-                    case .previews: PreviewsPane()
-                    case .permissions: PermissionsPane()
-                    case .about: AboutPane()
-                    }
+            Group {
+                switch controller.tab {
+                case .welcome: ScrollView { WelcomePane().padding(28).frame(maxWidth: .infinity, alignment: .leading) }
+                case .widgets: WidgetsPane()
+                case .weather: WeatherPane()
+                case .calendar: CalendarPane()
+                case .previews: PreviewsPane()
+                case .permissions: PermissionsPane()
+                case .about: ScrollView { AboutPane().padding(28).frame(maxWidth: .infinity, alignment: .leading) }
                 }
-                .padding(28)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle(controller.tab.title)
         }
@@ -115,7 +111,8 @@ struct SettingsRootView: View {
     }
 }
 
-private struct Section<Content: View>: View {
+/// A rounded group for the free-form pages (Welcome, About).
+private struct Card<Content: View>: View {
     var title: String
     var footer: String? = nil
     @ViewBuilder var content: () -> Content
@@ -136,6 +133,23 @@ private struct Section<Content: View>: View {
     }
 }
 
+/// A System Settings group: header above, rounded box, footer below.
+private struct Section<Content: View>: View {
+    var title: String
+    var footer: String? = nil
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        SwiftUI.Section {
+            content()
+        } header: {
+            Text(title)
+        } footer: {
+            if let footer { Text(footer).foregroundStyle(.secondary) }
+        }
+    }
+}
+
 // MARK: - Panes
 
 private struct WelcomePane: View {
@@ -149,13 +163,13 @@ private struct WelcomePane: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Section(title: "How it works") {
+            Card(title: "How it works") {
                 row("cursorarrow.motionlines", "Hover", "Hover an app in the Dock to preview every window before you switch.")
                 row("eye", "Glance", "Widgets sit beside the Dock: music, meetings, weather, CPU and batteries.")
                 row("hand.tap", "Act", "Click a preview, pause a track, open a drawer for more.")
                 row("command", "Cmd+Tab", "The switcher shows the highlighted app's windows. Press ↑ to pick one.")
             }
-            Section(title: "Nothing is asked up front",
+            Card(title: "Nothing is asked up front",
                     footer: "Widgets work without any permission. Turn features on as you want them in Permissions.") {
                 Button("Open Permissions") { SettingsWindowController.shared.tab = .permissions }
             }
@@ -178,27 +192,29 @@ private struct WidgetsPane: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Form {
             Section(title: "Widget bar", footer: "Widgets fill the space on either side of the Dock. When there isn't room for the full layout they switch to their compact glance style.") {
                 Toggle("Show widgets beside the Dock", isOn: Binding(get: { !settings.widgetsHidden }, set: { settings.widgetsHidden = !$0 }))
                 Picker("Open drawers", selection: $settings.drawerMode) {
                     ForEach(DrawerMode.allCases) { Text($0.title).tag($0) }
                 }
-                .frame(width: 280)
-                HStack {
-                    Text("Glass tint")
-                    Slider(value: $settings.glassTint, in: 0...1).frame(width: 200)
+                LabeledContent("Glass tint") {
+                    HStack {
+                        Slider(value: $settings.glassTint, in: 0...1).frame(width: 200)
+                    }
                 }
-                HStack {
-                    Text("Spacing")
-                    Slider(value: $settings.widgetGap, in: 4...20, step: 1).frame(width: 200)
-                    Text("\(Int(settings.widgetGap)) pt").monospacedDigit().foregroundStyle(.secondary)
+                LabeledContent("Spacing") {
+                    HStack {
+                        Slider(value: $settings.widgetGap, in: 4...20, step: 1).frame(width: 200)
+                        Text("\(Int(settings.widgetGap)) pt").monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
-                HStack {
-                    Text("Height")
-                    Slider(value: $settings.widgetHeight, in: 0.6...1, step: 0.05).frame(width: 200)
-                    Text(settings.widgetHeight >= 0.999 ? "Match Dock" : "\(Int(settings.widgetHeight * 100))% of Dock")
-                        .monospacedDigit().foregroundStyle(.secondary)
+                LabeledContent("Height") {
+                    HStack {
+                        Slider(value: $settings.widgetHeight, in: 0.6...1, step: 0.05).frame(width: 200)
+                        Text(settings.widgetHeight >= 0.999 ? "Match Dock" : "\(Int(settings.widgetHeight * 100))% of Dock")
+                            .monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
             }
             Section(title: "Widgets", footer: "Choose what shows, which side of the Dock it sits on, its layout and its size. Drag to reorder: left widgets run from the screen edge toward the Dock, right widgets from the Dock outward.") {
@@ -234,6 +250,7 @@ private struct WidgetsPane: View {
                     .onMove { settings.widgets.move(fromOffsets: $0, toOffset: $1) }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .frame(height: 290)
                 Button("Restore Defaults") { settings.widgets = AppSettings.defaultWidgets }
             }
@@ -255,7 +272,6 @@ private struct WidgetsPane: View {
                     Text("Apple Music").tag("music")
                     Text("Spotify").tag("spotify")
                 }
-                .frame(width: 280)
             }
             Section(title: "Device Batteries") {
                 if settings.hiddenDevices.isEmpty {
@@ -270,7 +286,7 @@ private struct WidgetsPane: View {
                     }
                 }
             }
-            Section(title: "General") {
+            Section(title: "General", footer: "With the menu bar icon hidden, open the app again from Finder to reach Settings.") {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in
                         do {
@@ -280,10 +296,9 @@ private struct WidgetsPane: View {
                         }
                     }
                 Toggle("Show menu bar icon", isOn: $settings.showMenuBarIcon)
-                Text("With the icon hidden, open the app again from Finder to reach Settings.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         }
+        .formStyle(.grouped)
     }
 }
 
@@ -295,16 +310,16 @@ private struct WeatherPane: View {
     @State private var searching = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Form {
             Section(title: "Units") {
                 Picker("Temperature", selection: $settings.useFahrenheit) {
                     Text("°F").tag(true); Text("°C").tag(false)
                 }
-                .pickerStyle(.segmented).frame(width: 260)
+                .pickerStyle(.segmented)
                 Picker("Wind", selection: $settings.useMph) {
                     Text("km/h").tag(false); Text("mph").tag(true)
                 }
-                .pickerStyle(.segmented).frame(width: 260)
+                .pickerStyle(.segmented)
             }
             Section(title: "Location", footer: "Weather data from Open-Meteo. Without a location, the city of your Mac's time zone is used.") {
                 Toggle("Follow my current location", isOn: $settings.followCurrentLocation)
@@ -359,6 +374,7 @@ private struct WeatherPane: View {
                 }
             }
         }
+        .formStyle(.grouped)
     }
 
     private func search() {
@@ -376,7 +392,7 @@ private struct CalendarPane: View {
     @ObservedObject private var service = CalendarService.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Form {
             if !service.authorized {
                 Section(title: "Apple Calendar") {
                     Text("Calendar events are read locally through EventKit — no Google account needed.")
@@ -409,6 +425,7 @@ private struct CalendarPane: View {
                 Toggle("Open the meeting link when the countdown ends", isOn: $settings.autoOpenMeetings)
             }
         }
+        .formStyle(.grouped)
     }
 }
 
@@ -417,7 +434,7 @@ private struct PreviewsPane: View {
     @ObservedObject private var permissions = Permissions.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Form {
             if permissions.states[.accessibility] != .granted || permissions.states[.screenRecording] != .granted {
                 Section(title: "Permissions needed") {
                     PermissionRow(kind: .accessibility)
@@ -426,10 +443,11 @@ private struct PreviewsPane: View {
             }
             Section(title: "Dock previews", footer: "Hover an app in the Dock to see its windows — including minimized ones and windows on other Spaces.") {
                 Toggle("Show window previews when hovering the Dock", isOn: $settings.dockPreviewsEnabled)
-                HStack {
-                    Text("Preview size")
-                    Slider(value: $settings.previewThumbHeight, in: 110...280, step: 10).frame(width: 220)
-                    Text("\(Int(settings.previewThumbHeight)) pt").monospacedDigit().foregroundStyle(.secondary)
+                LabeledContent("Preview size") {
+                    HStack {
+                        Slider(value: $settings.previewThumbHeight, in: 110...280, step: 10).frame(width: 220)
+                        Text("\(Int(settings.previewThumbHeight)) pt").monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
             }
             Section(title: "Cmd+Tab switcher", footer: "Hold ⌘ and press Tab to cycle apps, ↑ to move into the windows row, ←/→ to pick, release ⌘ to switch. Q quits, H hides, W closes a window, Esc cancels.") {
@@ -440,12 +458,13 @@ private struct PreviewsPane: View {
                 Toggle("Snap windows with ⌃⌥ and the arrow keys", isOn: $settings.tilingEnabled)
             }
         }
+        .formStyle(.grouped)
     }
 }
 
 private struct PermissionsPane: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Form {
             Section(title: "Every prompt has a job",
                     footer: "Permissions are only needed for the features that use them. Changes to Accessibility or Screen Recording may need the app to be relaunched.") {
                 ForEach(PermissionKind.allCases) { kind in
@@ -455,6 +474,7 @@ private struct PermissionsPane: View {
             }
             Button("Relaunch Intel Docktor") { Relauncher.relaunch() }
         }
+        .formStyle(.grouped)
     }
 }
 

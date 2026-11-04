@@ -45,7 +45,7 @@ struct StatsBarView: View {
                 .padding(.top, 10 * s)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.barRadius(height), style: .continuous))
             HStack(alignment: .firstTextBaseline, spacing: 1) {
-                Text(pct(stats.cpu)).font(Theme.font(23 * s, .bold))
+                Text(pct(stats.cpu)).font(Theme.font(23 * s, .bold)).rollingNumber(stats.cpu)
                 Text("%").font(Theme.font(12 * s, .bold)).foregroundStyle(Theme.secondary)
             }
             .shadow(color: .black.opacity(0.35), radius: 3)
@@ -81,8 +81,8 @@ struct StatsBarView: View {
             }
 
             VStack(alignment: .leading, spacing: 1 * s) {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(pct(stats.cpu)).font(Theme.font(22 * s, .bold))
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text(pct(stats.cpu)).font(Theme.font(22 * s, .bold)).rollingNumber(stats.cpu)
                     Text("%").font(Theme.font(11 * s, .bold)).foregroundStyle(Theme.secondary)
                 }
                 if showSubtitle {
