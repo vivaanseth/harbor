@@ -144,12 +144,19 @@ struct SparkChart: View {
             let pts = ChartMath.points(values, lo: l, hi: h, in: rect)
             let insets = ChartInsets(horizontal: lineWidth, top: verticalInset, bottom: lineWidth)
             ZStack(alignment: .topLeading) {
+                // The fill fades out at both ends instead of stopping at a hard
+                // edge, and the line fades in from the oldest reading.
                 SparkAreaShape(values: values, lo: l, hi: h, insets: insets)
                     .fill(LinearGradient(colors: [(colors.first ?? .white).opacity(fillOpacity), .clear],
                                          startPoint: .top, endPoint: .bottom))
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.3),
+                                                 .init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                                         startPoint: .leading, endPoint: .trailing))
                 SparkLineShape(values: values, lo: l, hi: h, insets: insets)
                     .stroke(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
                             style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+                    .mask(LinearGradient(stops: [.init(color: .black.opacity(0.15), location: 0), .init(color: .black, location: 0.2)],
+                                         startPoint: .leading, endPoint: .trailing))
                 ForEach(markers, id: \.self) { m in
                     if m.index >= 0, m.index < pts.count {
                         let pt = pts[m.index]
