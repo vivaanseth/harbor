@@ -19,7 +19,9 @@ struct StatsBarView: View {
 
     var body: some View {
         let s = height / 60
-        if compact {
+        // Too narrow for the number and a chart side by side: draw the chart
+        // full-bleed behind the number instead.
+        if compact || width < 150 * s {
             compactBody(s)
         } else {
             wideBody(s)
@@ -27,9 +29,11 @@ struct StatsBarView: View {
     }
 
     private func compactBody(_ s: CGFloat) -> some View {
-        // A calm hill rather than every jitter: average 30 s into 6 buckets.
+        // A calm hill rather than every jitter: average 30 s into buckets,
+        // more of them the wider the tile.
         let recent = Array(stats.cpuHistory.suffix(30))
-        let bucket = max(1, recent.count / 6)
+        let buckets = max(6, min(15, Int(width / (12 * s))))
+        let bucket = max(1, recent.count / buckets)
         let smooth = stride(from: 0, to: recent.count, by: bucket).map { i in
             let slice = recent[i..<min(i + bucket, recent.count)]
             return slice.reduce(0, +) / Double(slice.count)

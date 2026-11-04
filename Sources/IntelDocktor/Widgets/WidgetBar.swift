@@ -19,6 +19,8 @@ struct SizedWidget {
     var width: CGFloat
     var compact: Bool
     var size: CGFloat = 1
+    /// Stretched to take the room left over ("Fill space").
+    var fill = false
 }
 
 enum WidgetMetrics {
@@ -92,7 +94,7 @@ enum WidgetMetrics {
         }
         // A "Fill" widget may squeeze well below its usual minimum to stay wide.
         func minWidth(_ item: SizedWidget) -> CGFloat {
-            fillKinds.contains(item.kind) ? h * 1.5 : max(h * 2.6, universalWidth(h, size: item.size) * 0.75)
+            fillKinds.contains(item.kind) ? h * 1.2 : max(h * 2.6, universalWidth(h, size: item.size) * 0.75)
         }
         func total() -> CGFloat {
             items.reduce(0) { $0 + $1.width } + gap * CGFloat(max(0, items.count - 1))
@@ -133,8 +135,9 @@ enum WidgetMetrics {
         let fills = items.indices.filter { fillKinds.contains(items[$0].kind) && !items[$0].compact }
         // Fill runs right to the screen edge (fillRoom), not just the safe area.
         let leftover = (fillRoom ?? available) - total()
-        if !fills.isEmpty && leftover > 0 {
-            for i in fills { items[i].width += leftover / CGFloat(fills.count) }
+        for i in fills {
+            items[i].fill = true
+            if leftover > 0 { items[i].width += leftover / CGFloat(fills.count) }
         }
         return items
     }
@@ -153,7 +156,10 @@ private final class StripView: NSView {
 final class WidgetBarController: NSObject {
     static let shared = WidgetBarController()
 
-    private struct Base { var rect: NSRect; var side: WidgetSide }
+    /// `contentWidth`: what the widget lays its content out for. A "Fill"
+    /// widget plans for the narrowest it gets while giving way to the Dock,
+    /// so its content doesn't change (or overflow) as it narrows.
+    private struct Base { var rect: NSRect; var side: WidgetSide; var fill = false; var contentWidth: CGFloat = 0 }
     private struct Tween { var from: NSRect; var start: CFTimeInterval; var duration: Double }
 
     /// One stationary window per side of the Dock. Widgets move *inside* it:
@@ -181,6 +187,10 @@ final class WidgetBarController: NSObject {
     private var cancellables = Set<AnyCancellable>()
     private var layoutScheduled = false
     private let settings = AppSettings.shared
+    /// Space kept between "Fill" widgets and the screen edge.
+    private static let edgeMargin: CGFloat = 4
+    /// How narrow a "Fill" widget may get while giving way, × its height.
+    private static let fillFloor: CGFloat = 0.75
 
     /// Widgets stay up (even if the Dock hides) while you use them.
     var keepsDockAreaAlive: Bool { DrawerController.shared.openKind != nil || pointerOverWidgets }
@@ -277,18 +287,27 @@ final class WidgetBarController: NSObject {
             // Room for "Fill" widgets: up to the screen edge with a small margin.
             func fillRoom(_ side: WidgetSide) -> CGFloat {
                 side == .left
-                    ? dock.frame.minX - dock.screenFrame.minX - gap - 4
-                    : dock.screenFrame.maxX - dock.frame.maxX - gap - 4
+                    ? dock.frame.minX - dock.screenFrame.minX - gap - Self.edgeMargin
+                    : dock.screenFrame.maxX - dock.frame.maxX - gap - Self.edgeMargin
             }
             func outward(_ configs: [WidgetConfig], _ side: WidgetSide) -> [WidgetConfig] {
                 side == .left ? configs : configs.reversed()
+            }
+            // A "Fill" widget narrows to make way when the Dock grows (see
+            // targets()), so a side with one can use all the room to the edge.
+            func fitSide(_ configs: [WidgetConfig], _ side: WidgetSide) -> [SizedWidget] {
+                if configs.contains(where: { $0.size >= WidgetConfig.fill }) {
+                    let sized = WidgetMetrics.fit(configs, height: h, available: fillRoom(side), gap: gap, fillRoom: fillRoom(side))
+                    if sized.contains(where: \.fill) { return sized }
+                }
+                return WidgetMetrics.fit(configs, height: h, available: available(side), gap: gap)
             }
             var configsBySide: [WidgetSide: [WidgetConfig]] = [:]
             for side in WidgetSide.allCases { configsBySide[side] = settings.widgets.filter { $0.enabled && $0.side == side } }
             var spill: [WidgetSide: [WidgetConfig]] = [.left: [], .right: []]
             for side in WidgetSide.allCases {
                 let list = outward(configsBySide[side] ?? [], side)
-                let kept = Set(WidgetMetrics.fit(list, height: h, available: available(side), gap: gap).map(\.kind))
+                let kept = Set(fitSide(list, side).map(\.kind))
                 spill[side == .left ? .right : .left]! += list.filter { !kept.contains($0.kind) }
             }
             for side in WidgetSide.allCases {
@@ -296,8 +315,7 @@ final class WidgetBarController: NSObject {
                 var configs = configsBySide[side] ?? []
                 let extra = spill[side] ?? []
                 configs = side == .left ? extra.reversed() + configs : configs + extra
-                let sized = WidgetMetrics.fit(outward(configs, side), height: h, available: available(side), gap: gap,
-                                              fillRoom: fillRoom(side))
+                let sized = fitSide(outward(configs, side), side)
                 var x = side == .left ? dock.frame.minX - gap : dock.frame.maxX + gap
                 for item in sized.reversed() { // Dock → outer edge
                     let w = round(item.width)
@@ -309,8 +327,12 @@ final class WidgetBarController: NSObject {
                         rect = NSRect(x: x, y: y, width: w, height: h)
                         x += w + gap
                     }
-                    placed[item.kind] = Base(rect: rect, side: side)
-                    compactness[item.kind] = item.compact
+                    // As much as it may have to give: magnification, or half a new tile.
+                    let give = max(side == .left ? grow.left : grow.right, dock.tileSize * 1.065 / 2) + 2
+                    let contentWidth = item.fill ? max(h * Self.fillFloor, w - give) : w
+                    placed[item.kind] = Base(rect: rect, side: side, fill: item.fill, contentWidth: contentWidth)
+                    // Too narrow for the full layout: the glance view, on the stretched glass.
+                    compactness[item.kind] = item.compact || contentWidth < h * 1.8
                 }
             }
         }
@@ -355,7 +377,7 @@ final class WidgetBarController: NSObject {
             if let base = placed[kind] {
                 let (host, model) = ensureHost(kind, side: base.side)
                 if model.height != base.rect.height { model.height = base.rect.height }
-                if model.width != base.rect.width { model.width = base.rect.width }
+                if model.width != base.contentWidth { model.width = base.contentWidth }
                 let compact = compactness[kind] ?? true
                 if model.compact != compact { model.compact = compact }
                 if let old = bases[kind], let shown = frames[kind], !screenChanged, old.rect != base.rect || old.side != base.side {
@@ -387,10 +409,39 @@ final class WidgetBarController: NSObject {
         tick()
     }
 
-    private func target(for base: Base) -> NSRect {
+    /// Where each widget belongs this frame. The Dock pushes each side's run
+    /// of widgets outward as it magnifies or widens for a new tile; a "Fill"
+    /// widget gives way by narrowing instead of sliding, so nothing is pushed
+    /// off the screen.
+    private func targets() -> [WidgetKind: NSRect] {
+        let screen = layoutDock.screenFrame
         let dy = keepsDockAreaAlive ? 0 : motion.slide
-        let dx = base.side == .left ? -motion.growLeft : motion.growRight
-        return base.rect.offsetBy(dx: dx, dy: dy)
+        var result: [WidgetKind: NSRect] = [:]
+        for side in WidgetSide.allCases {
+            // Dock → screen edge.
+            let run = bases.filter { $0.value.side == side }.sorted {
+                side == .left ? $0.value.rect.maxX > $1.value.rect.maxX : $0.value.rect.minX < $1.value.rect.minX
+            }
+            guard let outer = run.last?.value.rect else { continue }
+            let push = side == .left ? motion.growLeft : motion.growRight
+            let slack = max(0, side == .left ? outer.minX - screen.minX - Self.edgeMargin
+                                             : screen.maxX - Self.edgeMargin - outer.maxX)
+            func giving(_ base: Base) -> CGFloat {
+                base.fill ? max(0, base.rect.width - base.rect.height * Self.fillFloor) : 0
+            }
+            let give = run.reduce(CGFloat(0)) { $0 + giving($1.value) }
+            let squeeze = min(give, max(0, push - slack))
+            var offset = push
+            for (kind, base) in run {
+                var r = base.rect
+                let cut = give > 0 ? squeeze * giving(base) / give : 0
+                r.size.width -= cut
+                r.origin.x = side == .left ? base.rect.maxX - offset - r.width : base.rect.minX + offset
+                offset -= cut
+                result[kind] = r.offsetBy(dx: 0, dy: dy)
+            }
+        }
+        return result
     }
 
     // MARK: - Per-frame motion
@@ -405,9 +456,9 @@ final class WidgetBarController: NSObject {
         link = l
     }
 
-    /// The Dock announced a new tile; start making room before it grows.
-    func anticipateDockGrowth(_ growth: CGFloat) {
-        motion.anticipate(growth: growth, restWidth: DockMonitor.shared.state.frame.width, now: CACurrentMediaTime())
+    /// The Dock announced a new tile at `time`; make room as it grows.
+    func anticipateDockGrowth(_ growth: CGFloat, at time: CFTimeInterval) {
+        motion.anticipate(growth: growth, restWidth: DockMonitor.shared.state.frame.width, at: time)
         wake()
     }
 
@@ -466,10 +517,11 @@ final class WidgetBarController: NSObject {
 
         var animating = false
         let scale = NSScreen.screens.first(where: { $0.frame == dock.screenFrame })?.backingScaleFactor ?? 2
+        let goals = targets()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for (kind, base) in bases {
-            let goal = target(for: base)
+            let goal = goals[kind] ?? base.rect
             var rect = goal
             if let tw = tweens[kind] {
                 let t = (now - tw.start) / tw.duration
@@ -482,6 +534,7 @@ final class WidgetBarController: NSObject {
             }
             rect.origin.x = (rect.origin.x * scale).rounded() / scale
             rect.origin.y = (rect.origin.y * scale).rounded() / scale
+            rect.size.width = (rect.size.width * scale).rounded() / scale
             apply(kind, rect, side: base.side)
         }
         CATransaction.commit()

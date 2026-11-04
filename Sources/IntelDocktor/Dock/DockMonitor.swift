@@ -92,6 +92,9 @@ final class DockMonitor: ObservableObject {
     /// Cocoa minY of the AX list when the Dock is fully shown.
     private(set) var restListMinY: CGFloat?
 
+    /// Minimized windows go into their app's tile instead of a tile of their own.
+    var minimizeToApplication: Bool { prefs.minimizeToApplication }
+
     private init() {}
 
     func start() {
@@ -110,6 +113,7 @@ final class DockMonitor: ObservableObject {
             MainActor.assumeIsolated { self?.refresh(force: true) }
         }
         MinimizedWindowCounter.shared.start()
+        MinimizeWatcher.shared.start()
         refresh(force: true)
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
@@ -294,7 +298,7 @@ final class DockMonitor: ObservableObject {
             guard let subrole = AX.subrole(element), subrole.hasSuffix("DockItem") else { return }
             let growth = subrole == "AXSeparatorDockItem" ? tile * 0.475 : tile * 1.065
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { WidgetBarController.shared.anticipateDockGrowth(growth) }
+                MainActor.assumeIsolated { WidgetBarController.shared.anticipateDockGrowth(growth, at: now) }
             }
         }
     }
@@ -390,18 +394,22 @@ final class DockMotion {
     /// (more precise than the next frame tick).
     var edgeArrival: CFTimeInterval?
 
-    // A tile the Dock announced but hasn't made room for yet.
-    private var anticipated: CGFloat = 0
-    private var anticipatedSince: CFTimeInterval = 0
-    private var anticipatedBaseWidth: CGFloat = 0
+    // Tiles the Dock announced but hasn't made room for yet, and when.
+    private var pending: [(growth: CGFloat, since: CFTimeInterval)] = []
+    private var pendingBaseWidth: CGFloat = 0
 
-    func anticipate(growth: CGFloat, restWidth: CGFloat, now: CFTimeInterval) {
-        if anticipated == 0 || now - anticipatedSince > 1.5 {
-            anticipated = 0
-            anticipatedBaseWidth = restWidth
-        }
-        anticipated += growth
-        anticipatedSince = now
+    func anticipate(growth: CGFloat, restWidth: CGFloat, at time: CFTimeInterval) {
+        if pending.isEmpty { pendingBaseWidth = restWidth }
+        pending.append((growth, time))
+    }
+
+    /// How far the Dock has widened for a new tile, `t` seconds after it was
+    /// announced. Measured on Sonoma: a smoothstep that starts ~55 ms after the
+    /// announcement and lasts ~435 ms. This runs a little ahead of that, so
+    /// widgets glide out with the Dock rather than jumping out before it.
+    static func tileProgress(_ t: CFTimeInterval) -> CGFloat {
+        let x = CGFloat(min(1, max(0, (t - 0.035) / 0.40)))
+        return x * x * (3 - 2 * x)
     }
 
     private var lastRest: CGRect = .zero
@@ -477,18 +485,18 @@ final class DockMotion {
                 r = max(r, half)
             }
         }
-        // Make room for an announced tile before the Dock starts growing; the
-        // Dock stays centred, so each side gets half. Done once the resting
-        // frame has caught up (or after 1.5 s if the tile never came).
+        // Make room for announced tiles as the Dock widens for them (it stays
+        // centred, so each side gets half). Done once the resting frame has
+        // caught up, or after 1.5 s if a tile never came.
         var ahead: CGFloat = 0
-        if anticipated > 0 {
-            let caughtUp = rest.width >= anticipatedBaseWidth + anticipated - 3
-            let shrank = rest.width < anticipatedBaseWidth - 3
-            if caughtUp || shrank || now - anticipatedSince > 1.5 {
-                anticipated = 0
+        if let newest = pending.map(\.since).max() {
+            let total = pending.reduce(0) { $0 + $1.growth }
+            let absorbed = rest.width - pendingBaseWidth
+            if absorbed >= total - 3 || absorbed < -3 || now - newest > 1.5 {
+                pending.removeAll()
             } else {
-                let ramp = CGFloat(min(1, max(0, (now - anticipatedSince) / 0.12)))
-                ahead = ((anticipatedBaseWidth + anticipated - rest.width) / 2 + 3) * ramp * ramp * (3 - 2 * ramp)
+                let grown = pending.reduce(0) { $0 + $1.growth * Self.tileProgress(now - $1.since) }
+                ahead = max(0, grown - max(0, absorbed)) / 2
             }
         }
 
@@ -500,7 +508,7 @@ final class DockMotion {
     }
 
     var isSettled: Bool {
-        magnify == 0 && anticipated == 0 && growLeft < 0.5 && growRight < 0.5 && hide.isSettled
+        magnify == 0 && pending.isEmpty && growLeft < 0.5 && growRight < 0.5 && hide.isSettled
     }
 }
 

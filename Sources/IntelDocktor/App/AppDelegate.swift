@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() { SettingsWindowController.shared.show() }
     @objc private func openPermissions() { SettingsWindowController.shared.show(tab: .permissions) }
+    @objc private func requestAccessibility() { Permissions.shared.request(.accessibility) }
     @objc private func toggleWidgets() { settings.widgetsHidden.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }
 }
@@ -82,6 +83,14 @@ extension AppDelegate: NSMenuDelegate {
         let title = NSMenuItem(title: "Intel Docktor", action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
+        if !PermissionCache.shared.accessibility {
+            // Without it, widgets only make way after the Dock has grown into them.
+            let item = NSMenuItem(title: "Turn On Accessibility…", action: #selector(requestAccessibility), keyEquivalent: "")
+            item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)
+            item.toolTip = "Lets widgets move out of the Dock's way the moment a window is minimized."
+            item.target = self
+            menu.addItem(item)
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: settings.widgetsHidden ? "Show Widgets" : "Hide Widgets",
                      action: #selector(toggleWidgets), keyEquivalent: "").target = self

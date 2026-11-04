@@ -38,23 +38,39 @@ struct MusicBarView: View {
         .animation(.easeOut(duration: 0.15), value: hover)
     }
 
+    /// Spacing and controls for the width there is: roomy with all three
+    /// controls, then tighter, then play/pause only, then none. The title
+    /// always keeps a little room.
+    private struct Fit { var pad: CGFloat; var gap: CGFloat; var hit: CGFloat; var spacing: CGFloat; var controls: Int }
+
+    private func fit(_ s: CGFloat) -> Fit {
+        let options = [Fit(pad: 11, gap: 11, hit: 1.9, spacing: 6, controls: 3),
+                       Fit(pad: 8, gap: 8, hit: 1.45, spacing: 2, controls: 3),
+                       Fit(pad: 8, gap: 8, hit: 1.45, spacing: 2, controls: 1)]
+        for f in options {
+            let controls = f.controls == 3 ? (17 + 20 + 17) * f.hit + 2 * f.spacing : 20 * f.hit
+            if width >= (2 * f.pad + 40 + 2 * f.gap + 28 + controls) * s { return f }
+        }
+        return Fit(pad: 8, gap: 8, hit: 1.45, spacing: 2, controls: 0)
+    }
+
     private func wideBody(_ np: NowPlaying, _ s: CGFloat) -> some View {
-        HStack(spacing: 11 * s) {
+        let f = fit(s)
+        return HStack(spacing: f.gap * s) {
             ArtworkView(image: music.artwork, size: 40 * s, radius: 10 * s)
             VStack(alignment: .leading, spacing: 2 * s) {
                 Text(np.title).font(Theme.font(15 * s, .bold)).lineLimit(1)
                 Text(np.artist).font(Theme.font(12.5 * s, .semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
             }
-            Spacer(minLength: 6 * s)
-            // Narrow (a stretched "Fill" widget in a tight spot): keep play/pause only.
-            HStack(spacing: 6 * s) {
-                if width >= 2.9 * height { TransportButton(symbol: "backward.fill", size: 17 * s) { music.previous() } }
-                if width >= 2.0 * height { TransportButton(symbol: np.isPlaying ? "pause.fill" : "play.fill", size: 20 * s) { music.playPause() } }
-                if width >= 2.9 * height { TransportButton(symbol: "forward.fill", size: 17 * s) { music.next() } }
+            Spacer(minLength: 0)
+            HStack(spacing: f.spacing * s) {
+                if f.controls == 3 { TransportButton(symbol: "backward.fill", size: 17 * s, hit: f.hit) { music.previous() } }
+                if f.controls >= 1 { TransportButton(symbol: np.isPlaying ? "pause.fill" : "play.fill", size: 20 * s, hit: f.hit) { music.playPause() } }
+                if f.controls == 3 { TransportButton(symbol: "forward.fill", size: 17 * s, hit: f.hit) { music.next() } }
             }
         }
-        .padding(.leading, 10 * s)
-        .padding(.trailing, 12 * s)
+        .padding(.leading, (f.pad - 1) * s)
+        .padding(.trailing, (f.pad + 1) * s)
     }
 
     private func idleBody(_ s: CGFloat) -> some View {
@@ -77,6 +93,7 @@ struct MusicBarView: View {
 private struct TransportButton: View {
     var symbol: String
     var size: CGFloat
+    var hit: CGFloat = 1.9
     var action: () -> Void
     @State private var hover = false
     @State private var pressed = false
@@ -85,7 +102,7 @@ private struct TransportButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .bold))
-                .frame(width: size * 1.9, height: size * 1.9)
+                .frame(width: size * hit, height: size * hit)
                 .background(Circle().fill(Color.white.opacity(hover ? 0.1 : 0)))
                 .contentShape(Circle())
                 .scaleEffect(pressed ? 0.88 : 1)
