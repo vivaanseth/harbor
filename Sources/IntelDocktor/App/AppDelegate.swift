@@ -72,7 +72,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() { SettingsWindowController.shared.show() }
     @objc private func openPermissions() { SettingsWindowController.shared.show(tab: .permissions) }
-    @objc private func requestAccessibility() { Permissions.shared.request(.accessibility) }
+    @objc private func requestAccessibility() {
+        // An entry left over from an earlier build stays listed (and switched
+        // on) but no longer applies; switching it off and on doesn't fix that.
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Turn On Accessibility"
+        alert.informativeText = "If Intel Docktor is already listed and switched on, that entry belongs to an earlier build and no longer applies. Select it, remove it with the − button, then choose Turn On Accessibility… again and switch on the new entry."
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Permissions.shared.request(.accessibility)
+    }
     @objc private func toggleWidgets() { settings.widgetsHidden.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

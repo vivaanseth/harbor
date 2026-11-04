@@ -36,15 +36,19 @@ final class MinimizeWatcher: @unchecked Sendable {
         }) { monitors.append(m) }
     }
 
-    /// Where the Dock is (CG y) and how much a new tile widens it, if a
-    /// minimize would add a tile and nothing better reports it.
+    /// Where the Dock is, where a minimized window's tile goes (just left of
+    /// the Trash) and how much it widens the Dock, if a minimize would add a
+    /// tile and nothing better reports it. CG coordinates.
+    private typealias Context = (dockY: CGFloat, tileX: CGFloat, growth: CGFloat)
+
     @MainActor
-    private var context: (dockY: CGFloat, growth: CGFloat)? {
+    private var context: Context? {
         // With Accessibility the Dock's own notification is exact.
         guard !PermissionCache.shared.accessibility else { return nil }
         let dock = DockMonitor.shared
         guard dock.state.orientation == .bottom, !dock.state.frame.isEmpty, !dock.minimizeToApplication else { return nil }
-        return (ScreenGeometry.primaryHeight - dock.state.frame.midY, dock.state.tileSize * 1.065)
+        let frame = dock.state.frame, tile = dock.state.tileSize
+        return (ScreenGeometry.primaryHeight - frame.midY, frame.maxX - tile * 1.6, tile * 1.065)
     }
 
     @MainActor
@@ -115,8 +119,7 @@ final class MinimizeWatcher: @unchecked Sendable {
 
     /// Polls one window while `keepGoing` holds; if it starts the minimize
     /// animation, tells the widgets when it began.
-    private func follow(_ id: CGWindowID, from start: CGRect, _ context: (dockY: CGFloat, growth: CGFloat),
-                        while keepGoing: () -> Bool) {
+    private func follow(_ id: CGWindowID, from start: CGRect, _ context: Context, while keepGoing: () -> Bool) {
         var raw: [UnsafeRawPointer?] = [UnsafeRawPointer(bitPattern: UInt(id))]
         guard let ids = CFArrayCreate(nil, &raw, 1, nil) else { return }
         let began = CACurrentMediaTime()
@@ -128,11 +131,17 @@ final class MinimizeWatcher: @unchecked Sendable {
             if b != start {
                 let changed = firstChange ?? CACurrentMediaTime()
                 firstChange = changed
-                // Genie and scale effects carry the window toward the Dock
-                // without making it taller; zooming grows it, moving it needs
-                // the mouse button held.
-                if abs(context.dockY - b.midY) <= abs(context.dockY - start.midY) - 3, b.height <= start.height + 2,
-                   NSEvent.pressedMouseButtons == 0 {
+                // The genie first stretches the window sideways toward its
+                // tile, keeping its height (within ~30 ms; far, across
+                // displays), then carries it down; the scale effect carries it
+                // down at once. Zooming makes it taller; moving it needs the
+                // mouse button held.
+                let stretched = abs(b.height - start.height) <= 2 &&
+                    ((abs(b.minX - start.minX) <= 1 && b.maxX >= start.maxX + 6 && start.maxX < context.tileX) ||
+                     (abs(b.maxX - start.maxX) <= 1 && b.minX <= start.minX - 6 && start.minX > context.tileX))
+                let descending = abs(context.dockY - b.midY) <= abs(context.dockY - start.midY) - 3 &&
+                    b.height <= start.height + 2
+                if stretched || descending, NSEvent.pressedMouseButtons == 0 {
                     // Bounds change ~20 ms after the Dock would have announced the tile.
                     let growth = context.growth
                     DispatchQueue.main.async {
