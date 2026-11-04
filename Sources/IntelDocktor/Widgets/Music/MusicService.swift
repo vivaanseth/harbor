@@ -52,6 +52,8 @@ final class MusicService: ObservableObject {
 
     @Published private(set) var nowPlaying: NowPlaying?
     @Published private(set) var artwork: NSImage?
+    /// The artwork is the playing app's icon (no trustworthy cover art).
+    @Published private(set) var artworkIsAppIcon = false
     @Published private(set) var isPlayerAvailable = false
     @Published private(set) var upNext: [QueueItem] = []
     @Published private(set) var playlists: [PlaylistItem] = []
@@ -64,6 +66,10 @@ final class MusicService: ObservableObject {
     private var artworkTrackID: String?
     private let settings = AppSettings.shared
     private var artworkCache: [String: NSImage] = [:]
+    /// The artist and album each system artwork image first arrived with (kept across launches),
+    /// to spot a browser handing one page's artwork to the next.
+    private var artworkOwners: [String: String] = UserDefaults.standard.dictionary(forKey: "music.artworkOwners") as? [String: String] ?? [:]
+    private var appIcons: [pid_t: NSImage] = [:]
 
     private init() {}
 
@@ -116,7 +122,7 @@ final class MusicService: ObservableObject {
                 guard let np = Self.fetchNowPlaying(p) else { continue }
                 if best == nil || (np.isPlaying && !(best!.isPlaying)) { best = np }
             }
-            var art: Data?
+            var art: MediaRemote.Artwork?
             if anyApp, best?.isPlaying != true, let (np, data) = MediaRemote.nowPlaying(),
                np.sourcePID == 0 || !running.contains(where: { $0.bundleID == NSRunningApplication(processIdentifier: np.sourcePID)?.bundleIdentifier }),
                best == nil || np.isPlaying {
@@ -127,10 +133,8 @@ final class MusicService: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 if self.isPlayerAvailable != available { self.isPlayerAvailable = available }
-                if let art, let np = best, self.artworkCache[np.trackID] == nil, let img = NSImage(data: art) {
-                    self.artworkCache[np.trackID] = img
-                }
                 self.apply(best)
+                if let np = best, np.player == .system { self.showSystemArtwork(np, art) }
             }
         }
     }
@@ -193,7 +197,40 @@ final class MusicService: ObservableObject {
                           artworkURL: parts[7].isEmpty ? nil : parts[7], sampledAt: Date())
     }
 
+    /// Artwork from the system's Now Playing info, checked on every update.
+    /// Browsers keep the last page's artwork when the next one (Netflix, say)
+    /// sends none, so an image only shows when the page described its media
+    /// (artist or album) and it hasn't already come with other media.
+    /// Otherwise the playing app's icon shows, as in Apple's Now Playing.
+    private func showSystemArtwork(_ np: NowPlaying, _ art: MediaRemote.Artwork?) {
+        // Tracks from one album share a cover, so the owner is artist and album.
+        let media = np.artist + "|" + np.album
+        var image: NSImage?
+        if let art, art.described {
+            let owner = artworkOwners[art.identifier]
+            if owner == nil {
+                if artworkOwners.count > 200 { artworkOwners.removeAll() }
+                artworkOwners[art.identifier] = media
+                UserDefaults.standard.set(artworkOwners, forKey: "music.artworkOwners")
+            }
+            if owner == nil || owner == media {
+                image = artworkCache[art.identifier] ?? NSImage(data: art.data)
+                artworkCache[art.identifier] = image
+            }
+        }
+        let isIcon = image == nil
+        if isIcon, np.sourcePID != 0 {
+            image = appIcons[np.sourcePID] ?? NSRunningApplication(processIdentifier: np.sourcePID)?.icon
+            appIcons[np.sourcePID] = image
+        }
+        if artwork !== image { artwork = image }
+        if artworkIsAppIcon != isIcon { artworkIsAppIcon = isIcon }
+    }
+
     private func loadArtwork(_ np: NowPlaying) {
+        // System Now Playing artwork is checked on every poll instead.
+        guard np.player != .system else { return }
+        artworkIsAppIcon = false
         if let cached = artworkCache[np.trackID] { artwork = cached; return }
         artwork = nil
         artworkTrackID = np.trackID

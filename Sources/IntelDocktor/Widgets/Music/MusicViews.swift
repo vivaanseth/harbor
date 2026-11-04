@@ -22,7 +22,7 @@ struct MusicBarView: View {
 
     private func compactBody(_ np: NowPlaying, _ s: CGFloat) -> some View {
         ZStack {
-            ArtworkView(image: music.artwork, size: height - 14 * s, radius: Theme.barRadius(height) - 6 * s)
+            ArtworkView(image: music.artwork, size: height - 14 * s, radius: Theme.barRadius(height) - 6 * s, isAppIcon: music.artworkIsAppIcon)
             if hover || !np.isPlaying {
                 Button { WidgetInteraction.shared.used(); music.playPause() } label: {
                     SwapGlyph(symbol: np.isPlaying ? "pause.fill" : "play.fill")
@@ -58,7 +58,7 @@ struct MusicBarView: View {
     private func wideBody(_ np: NowPlaying, _ s: CGFloat) -> some View {
         let f = fit(s)
         return HStack(spacing: f.gap * s) {
-            ArtworkView(image: music.artwork, size: 40 * s, radius: 10 * s)
+            ArtworkView(image: music.artwork, size: 40 * s, radius: 10 * s, isAppIcon: music.artworkIsAppIcon)
             VStack(alignment: .leading, spacing: 2 * s) {
                 Text(np.title).font(Theme.font(14 * s, .semibold)).lineLimit(1)
                     .contentTransition(.opacity).animation(Motion.content, value: np.title)

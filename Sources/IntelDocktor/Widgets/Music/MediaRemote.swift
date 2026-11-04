@@ -13,8 +13,16 @@ enum MediaRemote {
     private static let send: SendFn? = handle.flatMap { dlsym($0, "MRMediaRemoteSendCommand") }.map { unsafeBitCast($0, to: SendFn.self) }
     private static let callbackQueue = DispatchQueue(label: "mediaremote")
 
+    /// Artwork as the system reports it, with whether the source described
+    /// its media (an artist or album) alongside it.
+    struct Artwork {
+        var data: Data
+        var identifier: String
+        var described: Bool
+    }
+
     /// Called from MusicService's background queue; waits briefly for the reply.
-    static func nowPlaying() -> (NowPlaying, Data?)? {
+    static func nowPlaying() -> (NowPlaying, Artwork?)? {
         guard let info else { return nil }
         let done = DispatchSemaphore(value: 0)
         var dict: [String: Any] = [:]
@@ -39,7 +47,13 @@ enum MediaRemote {
                             duration: (dict["kMRMediaRemoteNowPlayingInfoDuration"] as? NSNumber)?.doubleValue ?? 0,
                             position: elapsed, isPlaying: rate > 0, artworkURL: nil, sampledAt: Date(),
                             sourcePID: pid)
-        return (np, dict["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data)
+        let album = dict["kMRMediaRemoteNowPlayingInfoAlbum"] as? String ?? ""
+        let artwork = (dict["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data).map { data in
+            Artwork(data: data,
+                    identifier: dict["kMRMediaRemoteNowPlayingInfoArtworkIdentifier"] as? String ?? "\(data.count)-\(data.hashValue)",
+                    described: !artist.isEmpty || !album.isEmpty)
+        }
+        return (np, artwork)
     }
 
     enum Command: UInt32 { case play = 0, pause = 1, toggle = 2, next = 4, previous = 5 }

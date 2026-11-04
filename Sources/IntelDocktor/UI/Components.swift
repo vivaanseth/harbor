@@ -198,10 +198,15 @@ struct ArtworkView: View {
     var image: NSImage?
     var size: CGFloat
     var radius: CGFloat? = nil
+    /// An app icon stands in for cover art: shown whole, not cropped.
+    var isAppIcon = false
 
     var body: some View {
         Group {
-            if let image {
+            if let image, isAppIcon {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                    .padding(-size * 0.06)  // app icons carry their own margin
+            } else if let image {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
             } else {
                 ZStack {
