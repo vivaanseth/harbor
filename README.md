@@ -1,50 +1,164 @@
+<div align="center">
+
 # Intel Docktor
 
-A native rebuild of [docktor](https://docktorapp.com/) for Macs that can't run macOS 26.
-Targets **macOS 14 Sonoma+**, built natively for **Intel (x86_64)**, with optional Universal builds.
+**Glass widgets, window previews and a better ⌘Tab, built for the Mac you already have.**
 
-- **Dock previews**: hover an app in the Dock to see live thumbnails of its windows, including minimized windows and windows on other Spaces. Click one to jump to it. Hover a card to close or minimize that window.
-- **Cmd+Tab switcher**: shows the highlighted app's windows as thumbnails. Press ↑ to move into the window row, ←/→ to pick a window, and release ⌘ to switch. Q quits the app, H hides it, W closes the selected window, and Esc cancels.
-- **Glass widgets beside the Dock** (click any one to open its drawer):
-  - **Music**: Apple Music and Spotify. Includes Up Next, Playlists, synced Lyrics (LRCLIB), Recent, and library search.
-  - **Calendar**: Apple Calendar via EventKit. Shows the next event with a countdown, a join-meeting button, Remind 5m, and today's schedule.
-  - **Weather**: Open-Meteo. Has Now, Hourly and 7-day pages, plus saved locations.
-  - **System Stats**: CPU, RAM, SSD, GPU, disk I/O and network, with sparklines, top processes, process search and a large-file finder.
-  - **Device Batteries**: your Mac's battery, Magic Mouse, Keyboard and Trackpad, and AirPods (L / R / Case).
-  - **Smart Stack** (off by default): one slot holding several widgets. Scroll over it to flip; it turns to a running timer, an upcoming event or playing music on its own. Choose what it holds in Settings → Widgets.
-  - **Focus Timer** (off by default): a Pomodoro ring with focus and break lengths. It keeps counting through sleep and relaunch.
-- **Customize** in Settings → Widgets: which widgets show, the side, order, layout (Glance, Full or Automatic), size (Small, Medium or Large), widget height, and how drawers open (hover, click or never). Widgets that don't fit move to the other side of the Dock.
-- **Music from any app**: in Automatic mode, the Music widget also shows and controls what Safari, Chrome and other apps are playing.
-- **Window tiling** (off by default): ⌃⌥← / ⌃⌥→ snap the front window to a half, then a third, then a fourth. ⌃⌥↑ fills the screen and ⌃⌥↓ centers the window.
+A native macOS app for Intel and Apple silicon Macs running **macOS 14 Sonoma or later**.
 
-## Build
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
+![Intel + Apple silicon](https://img.shields.io/badge/Intel%20%2B%20Apple%20silicon-supported-0A84FF)
+![Swift 5.9](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)
 
-```bash
-./build.sh                # Intel release build → build/Intel Docktor.app
-UNIVERSAL=1 ./build.sh    # Intel + Apple silicon
-./build.sh --install      # also copies the app to /Applications
-CONFIG=debug ./build.sh   # quick iteration build
-```
+<br>
 
-Requires Xcode 15+ (or Xcode Command Line Tools with Swift 5.9+).
+<img src="docs/images/hero.png" alt="Intel Docktor widgets on both sides of the macOS Dock: a System Stats widget with a live CPU graph on the left and a Music widget on the right" width="100%">
+
+<sub>System Stats on the left of the Dock, Music on the right. Both sit in the empty space beside the Dock.</sub>
+
+</div>
+
+---
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Widgets](#widgets)
+- [Install](#install)
+- [Getting started](#getting-started)
+- [Permissions](#permissions)
+- [Tips](#tips)
+- [Building from source](#building-from-source)
+
+---
+
+## What it does
+
+| | |
+| --- | --- |
+| 🧊 **Widgets beside the Dock** | Liquid-glass widgets fill the empty space on either side of your Dock. Click or hover one to open a drawer with more detail. |
+| 🪟 **Dock window previews** | Hover an app in the Dock to see live thumbnails of every window, including minimized ones and windows on other Spaces. Click to jump to it. |
+| ⌘ **A better ⌘Tab** | See each app's windows as you switch. Pick the exact window you want with the arrow keys. |
+| 📐 **Window tiling** *(optional)* | Snap the front window to halves, thirds and quarters with a keyboard shortcut. |
+
+Everything moves with the Dock: widgets slide aside when the Dock magnifies or a window minimizes, follow auto-hide, and stay off full-screen apps.
+
+---
+
+## Widgets
+
+| Widget | What you get |
+| --- | --- |
+| 🎵 **Music** | Now playing for Apple Music, Spotify and browsers. Play controls, **synced lyrics**, Up Next, playlists, search and recently played. Spotify works on free accounts. |
+| 📅 **Calendar** | Your next event with a countdown, a one-click **Join** button for video calls, a 5-minute reminder and today's schedule. |
+| ☀️ **Weather** | Current conditions plus hourly and 7-day forecasts, for where you are or any city you save. |
+| 📊 **System Stats** | CPU, memory, storage, GPU, disk and network with live graphs. Includes top processes and a large-file finder. |
+| 🔋 **Batteries** | Your Mac, Magic Mouse, Keyboard, Trackpad and AirPods (left, right and case). |
+| ⏱️ **Focus Timer** | A Pomodoro timer that keeps counting through sleep and restarts. *Off by default.* |
+| 🗂️ **Smart Stack** | Several widgets in one slot. Scroll to flip, or let it show what matters right now. *Off by default.* |
+
+Make them yours in **Settings → Widgets**: choose which widgets show, which side they sit on, their order, size and layout, and whether drawers open on hover, on click or never.
+
+---
+
+## Install
+
+1. Build the app (see [Building from source](#building-from-source)), or grab a build from someone who has.
+2. Drag **Intel Docktor.app** into your **Applications** folder.
+3. Open it. A welcome window walks you through the rest.
+
+> [!NOTE]
+> Intel Docktor runs from the menu bar (look for the Dock icon). It has no Dock icon of its own.
+
+---
+
+## Getting started
+
+1. **Open Intel Docktor.** Widgets appear beside your Dock right away.
+2. **Turn on the features you want** in **Settings → Permissions**. Nothing is requested until you ask for it.
+3. **Hover or click a widget** to open its drawer.
+4. **Hover an app in the Dock** to see its windows, or press **⌘Tab** to try the switcher.
+
+### ⌘Tab shortcuts
+
+| Key | Action |
+| --- | --- |
+| `↑` | Move to the window row |
+| `←` `→` | Choose a window |
+| Release `⌘` | Switch |
+| `Q` / `H` / `W` | Quit app / hide app / close window |
+| `Esc` | Cancel |
+
+### Tiling shortcuts *(when turned on)*
+
+| Key | Action |
+| --- | --- |
+| `⌃⌥←` / `⌃⌥→` | Half, then third, then quarter of the screen |
+| `⌃⌥↑` | Fill the screen |
+| `⌃⌥↓` | Center the window |
+
+---
 
 ## Permissions
 
-Nothing is requested at launch. Grant each one from **Settings → Permissions** when you want the feature that needs it:
+Each permission is optional and only unlocks the feature next to it.
 
-| Permission | Used for |
+| Permission | Unlocks |
 | --- | --- |
-| Accessibility | Dock previews, Cmd+Tab switcher, focusing windows, exact Dock measurement |
-| Screen Recording | Window thumbnails (ScreenCaptureKit) |
-| Calendar | Calendar widget |
-| Location | Weather for your current location (otherwise your time zone's city or a saved city) |
-| Automation | Controlling Apple Music / Spotify |
-| Notifications | Calendar reminders |
+| **Accessibility** | Dock previews, ⌘Tab switcher, Spotify's Up Next, and widgets that move instantly with the Dock |
+| **Screen Recording** | Window thumbnails |
+| **Calendar** | Calendar widget |
+| **Location** | Weather where you are (otherwise your time zone's city or a saved city) |
+| **Automation** | Controlling Apple Music and Spotify |
+| **Notifications** | Calendar reminders |
 
-Builds are signed with a local self-signed identity ("Intel Docktor Local Signing", created by `scripts/setup-signing.sh` and stored in `.signing/`), so macOS recognizes each rebuild as the same app and keeps its permissions. `.signing/` holds a private key: keep it to yourself. Without it, `build.sh` falls back to ad-hoc signing, and permissions then have to be granted again after every rebuild.
+> [!TIP]
+> If Accessibility is switched on in System Settings but Intel Docktor still asks for it, choose **Turn On Accessibility…** from the menu bar icon, then **Reset and Turn On**. This clears an old entry left by a previous build.
 
-## Notes
+---
 
-- Widgets fill the space on either side of the Dock and fall back to compact "glance" tiles when there isn't room. A smaller Dock (System Settings → Desktop & Dock → Size) leaves room for the full-width layouts.
-- Widgets only appear when the Dock is at the bottom of the screen. They follow Dock magnification and auto-hide, and stay off full-screen Spaces.
-- The Cmd+Tab switcher turns off macOS's built-in one only while Intel Docktor is running. Quitting or crashing restores the built-in switcher.
+## Tips
+
+- **Widgets look cramped?** Make the Dock a little smaller in **System Settings → Desktop & Dock**. Widgets switch to compact tiles when space is tight and move to the other side when they don't fit.
+- **Widgets only appear with the Dock at the bottom** of the screen.
+- **The built-in ⌘Tab comes back** whenever Intel Docktor quits, even after a crash.
+- **Spotify without Premium:** Up Next and "playing from" are read from Spotify's Now Playing panel, so keep that panel open. To add a playlist, copy its link in Spotify (Share → Copy link) and choose **Add Copied Link** in the Music drawer.
+
+---
+
+## Building from source
+
+**Requirements:** Xcode 15 or later (or the Command Line Tools with Swift 5.9+).
+
+```bash
+./build.sh                 # Release build for Intel → build/Intel Docktor.app
+UNIVERSAL=1 ./build.sh     # Intel + Apple silicon
+./build.sh --install       # Also copy the app to /Applications
+CONFIG=debug ./build.sh    # Faster debug build
+```
+
+### Keeping permissions between builds
+
+macOS ties permissions to an app's signature. Run `scripts/setup-signing.sh` once to create a local signing identity in `.signing/`. Every build is then signed the same way and macOS keeps its permissions. Without it, builds are ad-hoc signed and permissions must be granted again after each rebuild.
+
+> [!WARNING]
+> `.signing/` contains a private key. It is excluded from Git. Never commit or share it.
+
+### Project layout
+
+```
+Sources/IntelDocktor/
+├── App/          App lifecycle, menu bar, permissions
+├── Dock/         Dock tracking and motion
+├── Previews/     Dock window previews
+├── Switcher/     ⌘Tab switcher
+├── Widgets/      Widget bar and each widget
+├── Settings/     Settings window
+└── UI/           Glass, motion, theme and shared components
+```
+
+---
+
+<div align="center">
+<sub>Inspired by <a href="https://docktorapp.com/">docktor</a>, rebuilt from scratch for Macs that can't run macOS 26.</sub>
+</div>
