@@ -76,9 +76,12 @@ Make them yours in **Settings → Widgets**: choose which widgets show, which si
 
 ## Install
 
-1. Build the app (see [Building from source](#building-from-source)), or grab a build from someone who has.
-2. Drag **Intel Docktor.app** into your **Applications** folder.
-3. Open it. A welcome window walks you through the rest.
+1. Download **IntelDocktor-1.0.0.dmg** from the [latest release](https://github.com/vivaanseth/intel-docktor/releases/latest) and open it.
+2. Drag **Intel Docktor** into your **Applications** folder.
+3. The first time, **right-click the app → Open**, then click **Open**. (On macOS 15 or later, open it once, then click **Open Anyway** in **System Settings → Privacy & Security**.) A welcome window walks you through the rest.
+
+> [!IMPORTANT]
+> Releases aren't notarized by Apple, so macOS asks you to confirm the first time you open the app. After that it opens normally.
 
 <p align="center">
 <img src="docs/images/settings-welcome.png" alt="The Intel Docktor welcome screen explaining Hover, Glance, Act and Cmd+Tab" width="720">
