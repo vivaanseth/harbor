@@ -57,6 +57,19 @@ Everything moves with the Dock: widgets slide aside when the Dock magnifies or a
 | ⏱️ **Focus Timer** | A Pomodoro timer that keeps counting through sleep and restarts. *Off by default.* |
 | 🗂️ **Smart Stack** | Several widgets in one slot. Scroll to flip, or let it show what matters right now. *Off by default.* |
 
+<table>
+<tr>
+<td width="42%" valign="top">
+<img src="docs/images/drawer-stats.png" alt="The System Stats drawer with live CPU, RAM and SSD graphs">
+<p align="center"><sub><b>Drawers.</b> Hover or click a widget for more. Here, System Stats with live graphs.</sub></p>
+</td>
+<td width="58%" valign="top">
+<img src="docs/images/settings-widgets.png" alt="Widgets settings: show widgets, drawer behavior, glass tint, spacing, height, and a per-widget list of side, layout and size">
+<p align="center"><sub><b>Make them yours.</b> Pick each widget's side, layout and size.</sub></p>
+</td>
+</tr>
+</table>
+
 Make them yours in **Settings → Widgets**: choose which widgets show, which side they sit on, their order, size and layout, and whether drawers open on hover, on click or never.
 
 ---
@@ -66,6 +79,10 @@ Make them yours in **Settings → Widgets**: choose which widgets show, which si
 1. Build the app (see [Building from source](#building-from-source)), or grab a build from someone who has.
 2. Drag **Intel Docktor.app** into your **Applications** folder.
 3. Open it. A welcome window walks you through the rest.
+
+<p align="center">
+<img src="docs/images/settings-welcome.png" alt="The Intel Docktor welcome screen explaining Hover, Glance, Act and Cmd+Tab" width="720">
+</p>
 
 > [!NOTE]
 > Intel Docktor runs from the menu bar (look for the Dock icon). It has no Dock icon of its own.
