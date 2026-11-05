@@ -274,9 +274,15 @@ private struct WidgetsPane: View {
                     Text("Spotify").tag("spotify")
                 }
             }
-            Section(title: "Spotify", footer: spotify.connected
-                    ? "Up Next, your playlists and search come from Spotify. Playback goes through the Spotify app."
-                    : "What's playing, play/pause, skip and lyrics work without this. For Up Next, playlists and search, Spotify needs your OK: create a free app at the Spotify developer dashboard (any name and description), add the redirect URI below, tick Web API, save, then paste its Client ID here.") {
+            Section(title: "Spotify", footer: "Any Spotify account works: what's playing, controls and synced lyrics through the Spotify app; what's next and the playlist it's playing from, read from Spotify's window (needs Accessibility); playlists you play or add as links; search opens in Spotify.") {
+                LabeledContent("What's next") {
+                    Text(PermissionCache.shared.accessibility ? "From the Spotify app" : "Needs Accessibility")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section(title: "Spotify Premium (optional)", footer: spotify.connected
+                    ? "Up Next shows the whole queue, Playlists your whole library, and search finds any song."
+                    : "With Premium, Spotify's developer tools add the whole queue, your whole library and full search: create an app at the Spotify developer dashboard (any name), add the redirect URI below, tick Web API, then paste its Client ID here.") {
                 if spotify.connected {
                     LabeledContent("Account") { Text(spotify.accountName ?? "Connected") }
                     HStack {

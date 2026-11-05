@@ -227,12 +227,15 @@ private struct UpNextPage: View {
                     TrackRow(artwork: music.artwork, title: np.title, subtitle: np.artist, active: true) {
                         music.openPlayer()
                     }
-                    if music.isSpotify && !spotify.connected {
-                        ConnectSpotifyNote(text: "Connect Spotify to see what's playing next.")
+                    if music.isSpotify && !spotify.connected && !music.canReadSpotifyScreen {
+                        AccessibilityNote()
+                    } else if music.isSpotify && !spotify.connected && music.upNext.isEmpty {
+                        note("Open Spotify's Now Playing view (the button beside its play bar) to see what's next.")
                     } else if music.upNext.isEmpty {
                         note("Nothing queued after this track.")
                     } else {
-                        Text("Up Next").font(Theme.font(11, .semibold)).foregroundStyle(Theme.tertiary)
+                        Text(music.spotifyContext.map { "Next · playing from \($0.name)" } ?? "Up Next")
+                            .font(Theme.font(11, .semibold)).foregroundStyle(Theme.tertiary).lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 10).padding(.top, 6)
                     }
                     ForEach(music.upNext) { item in
@@ -257,14 +260,35 @@ private struct UpNextPage: View {
 private struct PlaylistsPage: View {
     @ObservedObject private var music = MusicService.shared
     @ObservedObject private var spotify = SpotifyAPI.shared
+    @ObservedObject private var shelf = SpotifyShelf.shared
+    @State private var addMessage: String?
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 2) {
-                if MusicPlayer.spotify.isRunning && !spotify.connected {
-                    ConnectSpotifyNote(text: "Connect Spotify to play your playlists from here.")
+                if !spotify.connected {
+                    // Without the Web API: playlists you've played from, and links you've added.
+                    ForEach(shelf.items, id: \.uri) { item in
+                        TrackRow(artworkURL: item.artworkURL, showArtwork: true, title: item.name,
+                                 subtitle: item.pinned ? "Spotify" : "Spotify · played recently") {
+                            music.play(spotifyURI: item.uri)
+                        }
+                        .contextMenu { Button("Remove") { shelf.remove(item.uri) } }
+                    }
+                    if MusicPlayer.spotify.isRunning || !shelf.items.isEmpty {
+                        HStack {
+                            Text(addMessage ?? (shelf.items.isEmpty ? "Playlists you play in Spotify show up here." : ""))
+                                .font(Theme.font(11, .medium)).foregroundStyle(Theme.tertiary).lineLimit(2)
+                            Spacer(minLength: 6)
+                            PillButton(title: "Add Copied Link") {
+                                let text = NSPasteboard.general.string(forType: .string) ?? ""
+                                addMessage = shelf.add(link: text) ? nil : "Copy a Spotify playlist or album link first (Share › Copy link)."
+                            }
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 8)
+                    }
                 }
-                if music.playlists.isEmpty && (spotify.connected || !MusicPlayer.spotify.isRunning) {
+                if music.playlists.isEmpty && shelf.items.isEmpty && !MusicPlayer.spotify.isRunning {
                     EmptyStateView(symbol: "music.note.list", title: "No playlists",
                                    message: "Open Apple Music or Spotify to browse your playlists.")
                         .frame(height: 200)
@@ -278,16 +302,15 @@ private struct PlaylistsPage: View {
     }
 }
 
-/// Points to Settings for connecting Spotify (queue, playlists, search).
-private struct ConnectSpotifyNote: View {
-    var text: String
-
+/// Spotify's next track is read from its own window, which needs Accessibility.
+private struct AccessibilityNote: View {
     var body: some View {
         VStack(spacing: 8) {
-            Text(text).font(Theme.font(12, .medium)).foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
-            PillButton(title: "Connect Spotify…", prominent: true) {
+            Text("Allow Accessibility to see what's next in Spotify.")
+                .font(Theme.font(12, .medium)).foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
+            PillButton(title: "Turn On Accessibility…", prominent: true) {
                 DrawerController.shared.close()
-                SettingsWindowController.shared.show(tab: .widgets)
+                Permissions.shared.resetAccessibility()
             }
         }
         .frame(maxWidth: .infinity)
@@ -307,7 +330,7 @@ private struct RecentPage: View {
                         .frame(height: 220)
                 }
                 ForEach(music.recent, id: \.trackID) { np in
-                    TrackRow(title: np.title, subtitle: "\(np.artist) · \(np.player.rawValue)")
+                    TrackRow(showArtwork: false, title: np.title, subtitle: "\(np.artist) · \(np.player.rawValue)") { music.play(recent: np) }
                 }
             }
         }
@@ -325,6 +348,18 @@ private struct SearchPage: View {
                     EmptyStateView(symbol: "magnifyingglass", title: music.searchesSpotify ? "Search Spotify" : "Search your library",
                                    message: music.searchesSpotify ? "Songs on Spotify." : "Songs, artists and albums in Apple Music.")
                         .frame(height: 200)
+                } else if music.searchesSpotify && !SpotifyAPI.shared.connected {
+                    TrackRow(showArtwork: false, title: "Search Spotify for “\(drawer.searchText)”",
+                             subtitle: "Opens the results in Spotify") {
+                        music.searchInSpotify(drawer.searchText)
+                        DrawerController.shared.close()
+                    }
+                    if !music.searchResults.isEmpty {
+                        Text("Played recently").font(Theme.font(12, .bold)).foregroundStyle(Theme.secondary).padding(.leading, 10).padding(.top, 6)
+                        ForEach(music.searchResults) { item in
+                            TrackRow(showArtwork: false, title: item.title, subtitle: item.subtitle) { music.playSearchResult(item) }
+                        }
+                    }
                 } else {
                     Text("Songs").font(Theme.font(12, .bold)).foregroundStyle(Theme.secondary).padding(.leading, 10)
                     ForEach(music.searchResults) { item in

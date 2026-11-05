@@ -61,6 +61,8 @@ final class MusicService: ObservableObject {
     @Published private(set) var artworkIsAppIcon = false
     @Published private(set) var isPlayerAvailable = false
     @Published private(set) var upNext: [QueueItem] = []
+    /// What Spotify is playing from, as its own window shows it (no Web API).
+    @Published private(set) var spotifyContext: (name: String, uri: String)?
     @Published private(set) var playlists: [PlaylistItem] = []
     private var musicPlaylists: [PlaylistItem] = []
     private var spotifyPlaylists: [PlaylistItem] = []
@@ -69,6 +71,7 @@ final class MusicService: ObservableObject {
     @Published private(set) var automationDenied = false
 
     private let queue = DispatchQueue(label: "music.applescript", qos: .userInitiated)
+    private let screenQueue = DispatchQueue(label: "music.spotify-screen", qos: .utility)
     private var timer: Timer?
     private var artworkTrackID: String?
     private let settings = AppSettings.shared
@@ -167,7 +170,13 @@ final class MusicService: ObservableObject {
             }
             loadArtwork(np)
             LyricsService.shared.load(for: np)
-            if DrawerController.shared.openKind == .music { refreshUpNext() }
+            if isSpotify && !SpotifyAPI.shared.connected {
+                // Learn what's next and what it's playing from as Spotify's
+                // own panel catches up with the new track.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.readSpotifyScreen() }
+            } else if DrawerController.shared.openKind == .music {
+                refreshUpNext()
+            }
         }
     }
 
@@ -321,6 +330,10 @@ final class MusicService: ObservableObject {
     }
 
     func refreshUpNext() {
+        if isSpotify && !SpotifyAPI.shared.connected {
+            readSpotifyScreen()
+            return
+        }
         if isSpotify {
             Task {
                 let items = await SpotifyAPI.shared.queue() ?? []
@@ -357,6 +370,33 @@ final class MusicService: ObservableObject {
                 return QueueItem(id: "\(idx)-\(f[1])", title: f[1], subtitle: f[2], index: idx)
             }
             self?.upNext = items
+        }
+    }
+
+    /// Whether Spotify's next track can be read from its window (needs Accessibility).
+    var canReadSpotifyScreen: Bool { PermissionCache.shared.accessibility }
+
+    /// Without the Web API: the next track and what it's playing from, as the
+    /// Spotify app shows them. Playlists seen here join the drawer's list.
+    private func readSpotifyScreen() {
+        guard canReadSpotifyScreen else { upNext = []; spotifyContext = nil; return }
+        screenQueue.async {
+            let snap = SpotifyScreen.read()
+            Task { @MainActor in
+                guard self.isSpotify, !SpotifyAPI.shared.connected else { return }
+                if let title = snap?.nextTitle, !title.isEmpty {
+                    self.upNext = [QueueItem(id: "next-\(title)", title: title, subtitle: snap?.nextArtist ?? "",
+                                             index: 1, uri: "spotify:queue")]
+                } else {
+                    self.upNext = []
+                }
+                if let name = snap?.contextName, let uri = snap?.contextURI {
+                    self.spotifyContext = (name, uri)
+                    SpotifyShelf.shared.remember(name: name, uri: uri)
+                } else {
+                    self.spotifyContext = nil
+                }
+            }
         }
     }
 
@@ -414,13 +454,50 @@ final class MusicService: ObservableObject {
         run("tell application \"Music\" to play user playlist \"\(name)\"") { [weak self] _ in self?.poll() }
     }
 
-    /// Search goes to Spotify when that's what's playing (or the only player) and it's connected.
+    /// Search is about Spotify when that's what's playing (or the only player).
     var searchesSpotify: Bool {
-        SpotifyAPI.shared.connected && MusicPlayer.spotify.isRunning && (isSpotify || !MusicPlayer.music.isRunning)
+        MusicPlayer.spotify.isRunning && (isSpotify || !MusicPlayer.music.isRunning)
     }
+
+    /// Opens Spotify's own search for `text` (works on any account).
+    func searchInSpotify(_ text: String) {
+        guard let q = text.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "spotify:search:\(q)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Replays something from the Recent list.
+    func play(recent np: NowPlaying) {
+        switch np.player {
+        case .spotify where np.trackID.hasPrefix("spotify:"):
+            playSpotify(np.trackID)
+        case .music:
+            let id = np.trackID.replacingOccurrences(of: "\"", with: "")
+            run("tell application \"Music\" to play (first track of library playlist 1 whose persistent ID is \"\(id)\")") { [weak self] _ in
+                self?.poll()
+            }
+        default:
+            openPlayer()
+        }
+    }
+
+    /// Plays a Spotify playlist, album or track by URI.
+    func play(spotifyURI uri: String) { playSpotify(uri) }
 
     func search(_ text: String) {
         let q = text.trimmingCharacters(in: .whitespaces)
+        if searchesSpotify && !SpotifyAPI.shared.connected {
+            // No Web API: match what's been played and saved here; the page
+            // also offers Spotify's own search.
+            let lower = q.lowercased()
+            searchResults = q.isEmpty ? [] : recent.filter {
+                $0.player == .spotify && $0.trackID.hasPrefix("spotify:") &&
+                    ($0.title.lowercased().contains(lower) || $0.artist.lowercased().contains(lower))
+            }.enumerated().map { i, np in
+                QueueItem(id: np.trackID, title: np.title, subtitle: np.artist, index: i, uri: np.trackID)
+            }
+            return
+        }
         if searchesSpotify, !q.isEmpty {
             Task {
                 let items = await SpotifyAPI.shared.searchTracks(q) ?? []
