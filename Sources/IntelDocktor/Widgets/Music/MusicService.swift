@@ -35,13 +35,18 @@ struct QueueItem: Identifiable, Hashable {
     var title: String
     var subtitle: String
     var index: Int
+    /// Spotify items: what to play, and a small cover.
+    var uri: String? = nil
+    var artworkURL: URL? = nil
 }
 
 struct PlaylistItem: Identifiable, Hashable {
-    var id: String { name }
+    var id: String { uri ?? name }
     var name: String
     var subtitle: String
     var count: Int
+    var uri: String? = nil
+    var artworkURL: URL? = nil
 }
 
 /// Apple Music and Spotify over Apple Events. Never launches a player that
@@ -57,6 +62,8 @@ final class MusicService: ObservableObject {
     @Published private(set) var isPlayerAvailable = false
     @Published private(set) var upNext: [QueueItem] = []
     @Published private(set) var playlists: [PlaylistItem] = []
+    private var musicPlaylists: [PlaylistItem] = []
+    private var spotifyPlaylists: [PlaylistItem] = []
     @Published private(set) var recent: [NowPlaying] = []
     @Published private(set) var searchResults: [QueueItem] = []
     @Published private(set) var automationDenied = false
@@ -118,13 +125,17 @@ final class MusicService: ObservableObject {
         }
         queue.async { [weak self] in
             var best: NowPlaying?
+            var reached: [MusicPlayer] = []
             for p in running {
                 guard let np = Self.fetchNowPlaying(p) else { continue }
+                reached.append(p)
                 if best == nil || (np.isPlaying && !(best!.isPlaying)) { best = np }
             }
+            // The system's Now Playing covers everything else, including a
+            // player we couldn't script (Automation not allowed, say).
             var art: MediaRemote.Artwork?
             if anyApp, best?.isPlaying != true, let (np, data) = MediaRemote.nowPlaying(),
-               np.sourcePID == 0 || !running.contains(where: { $0.bundleID == NSRunningApplication(processIdentifier: np.sourcePID)?.bundleIdentifier }),
+               np.sourcePID == 0 || !reached.contains(where: { $0.bundleID == NSRunningApplication(processIdentifier: np.sourcePID)?.bundleIdentifier }),
                best == nil || np.isPlaying {
                 best = np
                 art = data
@@ -142,8 +153,9 @@ final class MusicService: ObservableObject {
     private func apply(_ np: NowPlaying?) {
         let previous = nowPlaying
         // Skip no-op updates so the widgets don't re-render every second.
+        // Small drift counts as a change so synced lyrics stay in step.
         if let p = previous, let n = np, p.trackID == n.trackID, p.isPlaying == n.isPlaying,
-           p.title == n.title, abs(p.livePosition(at: n.sampledAt) - n.position) < 1.5 {
+           p.title == n.title, abs(p.livePosition(at: n.sampledAt) - n.position) < 0.3 {
             return
         }
         nowPlaying = np
@@ -186,7 +198,10 @@ final class MusicService: ObservableObject {
             end tell
             """
         }
+        let started = Date()
         guard let result = AppleScriptRunner.run(source), result != "stopped" else { return nil }
+        // The position was read somewhere during the call; assume halfway.
+        let sampledAt = started.addingTimeInterval(Date().timeIntervalSince(started) / 2)
         let parts = result.components(separatedBy: sep)
         guard parts.count >= 8 else { return nil }
         let num: (String) -> Double = { Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0 }
@@ -194,7 +209,7 @@ final class MusicService: ObservableObject {
                           title: parts[2], artist: parts[3], album: parts[4],
                           duration: num(parts[5]), position: num(parts[6]),
                           isPlaying: parts[0] == "playing",
-                          artworkURL: parts[7].isEmpty ? nil : parts[7], sampledAt: Date())
+                          artworkURL: parts[7].isEmpty ? nil : parts[7], sampledAt: sampledAt)
     }
 
     /// Artwork from the system's Now Playing info, checked on every update.
@@ -262,7 +277,7 @@ final class MusicService: ObservableObject {
 
     func seek(to seconds: Double) {
         guard let np = nowPlaying, np.player != .system else { return }
-        run("tell application \"\(np.player.rawValue)\" to set player position to \(Int(seconds))")
+        run("tell application \"\(np.player.rawValue)\" to set player position to \(seconds)") { [weak self] _ in self?.poll() }
     }
 
     private func optimisticToggle() {
@@ -298,7 +313,24 @@ final class MusicService: ObservableObject {
 
     // MARK: - Drawer data
 
+    /// Whether Spotify is what's playing (scripted, or seen through Now Playing).
+    var isSpotify: Bool {
+        guard let np = nowPlaying else { return false }
+        return np.player == .spotify ||
+            (np.player == .system && NSRunningApplication(processIdentifier: np.sourcePID)?.bundleIdentifier == MusicPlayer.spotify.bundleID)
+    }
+
     func refreshUpNext() {
+        if isSpotify {
+            Task {
+                let items = await SpotifyAPI.shared.queue() ?? []
+                upNext = items.prefix(20).enumerated().map { i, item in
+                    QueueItem(id: "\(i)-\(item.uri)", title: item.name, subtitle: item.subtitle, index: i + 1,
+                              uri: item.uri, artworkURL: item.artworkURL)
+                }
+            }
+            return
+        }
         guard let np = nowPlaying, np.player == .music else { upNext = []; return }
         let sep = "‖", rec = "¶"
         let source = """
@@ -329,11 +361,27 @@ final class MusicService: ObservableObject {
     }
 
     func playQueueItem(_ item: QueueItem) {
+        if item.uri != nil {
+            // Spotify can't jump into its queue; skipping ahead gets there.
+            run("tell application \"Spotify\"\nrepeat \(item.index) times\nnext track\nend repeat\nend tell") { [weak self] _ in
+                self?.poll()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.refreshUpNext() }
+            }
+            return
+        }
         run("tell application \"Music\" to play track \(item.index) of current playlist") { [weak self] _ in self?.poll() }
     }
 
     func refreshPlaylists() {
-        guard MusicPlayer.music.isRunning else { playlists = []; return }
+        Task {
+            let spotify = (MusicPlayer.spotify.isRunning ? await SpotifyAPI.shared.playlists() : nil) ?? []
+            spotifyPlaylists = spotify.map { p in
+                PlaylistItem(name: p.name, subtitle: "Spotify" + (p.owner?.display_name.map { " · \($0)" } ?? ""),
+                             count: p.tracks?.total ?? 0, uri: p.uri, artworkURL: p.artworkURL)
+            }
+            playlists = isSpotify ? spotifyPlaylists + musicPlaylists : musicPlaylists + spotifyPlaylists
+        }
+        guard MusicPlayer.music.isRunning else { musicPlaylists = []; return }
         let sep = "‖", rec = "¶"
         let source = """
         tell application "Music"
@@ -347,21 +395,42 @@ final class MusicService: ObservableObject {
         end tell
         """
         run(source) { [weak self] result in
-            self?.playlists = (result ?? "").components(separatedBy: rec).compactMap { line in
+            guard let self else { return }
+            self.musicPlaylists = (result ?? "").components(separatedBy: rec).compactMap { line in
                 let f = line.components(separatedBy: sep)
                 guard f.count >= 2, !f[0].isEmpty else { return nil }
                 return PlaylistItem(name: f[0], subtitle: "Apple Music", count: Int(f[1]) ?? 0)
             }
+            self.playlists = self.isSpotify ? self.spotifyPlaylists + self.musicPlaylists : self.musicPlaylists + self.spotifyPlaylists
         }
     }
 
     func play(playlist: PlaylistItem) {
+        if let uri = playlist.uri {
+            playSpotify(uri)
+            return
+        }
         let name = playlist.name.replacingOccurrences(of: "\"", with: "\\\"")
         run("tell application \"Music\" to play user playlist \"\(name)\"") { [weak self] _ in self?.poll() }
     }
 
+    /// Search goes to Spotify when that's what's playing (or the only player) and it's connected.
+    var searchesSpotify: Bool {
+        SpotifyAPI.shared.connected && MusicPlayer.spotify.isRunning && (isSpotify || !MusicPlayer.music.isRunning)
+    }
+
     func search(_ text: String) {
         let q = text.trimmingCharacters(in: .whitespaces)
+        if searchesSpotify, !q.isEmpty {
+            Task {
+                let items = await SpotifyAPI.shared.searchTracks(q) ?? []
+                guard DrawerController.shared.searchText.trimmingCharacters(in: .whitespaces) == q else { return }
+                searchResults = items.enumerated().map { i, item in
+                    QueueItem(id: item.uri, title: item.name, subtitle: item.subtitle, index: i, uri: item.uri, artworkURL: item.artworkURL)
+                }
+            }
+            return
+        }
         guard !q.isEmpty, MusicPlayer.music.isRunning else { searchResults = []; return }
         let escaped = q.replacingOccurrences(of: "\"", with: "\\\"")
         let sep = "‖", rec = "¶"
@@ -389,8 +458,20 @@ final class MusicService: ObservableObject {
     }
 
     func playSearchResult(_ item: QueueItem) {
+        if let uri = item.uri {
+            playSpotify(uri)
+            return
+        }
         run("tell application \"Music\" to play (first track of library playlist 1 whose persistent ID is \"\(item.id)\")") { [weak self] _ in
             self?.poll()
+        }
+    }
+
+    /// Plays a Spotify track or playlist URI in the Spotify app.
+    private func playSpotify(_ uri: String) {
+        run("tell application \"Spotify\" to play track \"\(uri)\"") { [weak self] _ in
+            self?.poll()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.refreshUpNext() }
         }
     }
 

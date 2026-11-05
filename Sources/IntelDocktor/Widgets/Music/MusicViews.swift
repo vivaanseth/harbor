@@ -172,6 +172,8 @@ struct MusicDrawer: View {
 
 private struct TrackRow: View {
     var artwork: NSImage? = nil
+    /// A cover to fetch instead (Spotify items).
+    var artworkURL: URL? = nil
     var showArtwork = true
     var title: String
     var subtitle: String
@@ -182,7 +184,21 @@ private struct TrackRow: View {
     var body: some View {
         HoverRow(radius: 9, action: action) {
             HStack(spacing: 9) {
-                if showArtwork { ArtworkView(image: artwork, size: 30, radius: 6) }
+                if showArtwork {
+                    if let artworkURL {
+                        AsyncImage(url: artworkURL, transaction: Transaction(animation: Motion.content)) { phase in
+                            if let image = phase.image {
+                                image.resizable().aspectRatio(contentMode: .fill).transition(.opacity)
+                            } else {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.tile)
+                            }
+                        }
+                        .frame(width: 30, height: 30)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    } else {
+                        ArtworkView(image: artwork, size: 30, radius: 6, isAppIcon: active && MusicService.shared.artworkIsAppIcon)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title).font(Theme.font(12.5, .bold)).lineLimit(1)
                     Text(subtitle).font(Theme.font(10.5, .semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
@@ -202,6 +218,7 @@ private struct TrackRow: View {
 
 private struct UpNextPage: View {
     @ObservedObject private var music = MusicService.shared
+    @ObservedObject private var spotify = SpotifyAPI.shared
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -210,13 +227,17 @@ private struct UpNextPage: View {
                     TrackRow(artwork: music.artwork, title: np.title, subtitle: np.artist, active: true) {
                         music.openPlayer()
                     }
-                    if np.player == .spotify {
-                        note("Spotify doesn't share its queue with other apps.")
+                    if music.isSpotify && !spotify.connected {
+                        ConnectSpotifyNote(text: "Connect Spotify to see what's playing next.")
                     } else if music.upNext.isEmpty {
                         note("Nothing queued after this track.")
+                    } else {
+                        Text("Up Next").font(Theme.font(11, .semibold)).foregroundStyle(Theme.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 10).padding(.top, 6)
                     }
                     ForEach(music.upNext) { item in
-                        TrackRow(title: item.title, subtitle: item.subtitle) { music.playQueueItem(item) }
+                        TrackRow(artworkURL: item.artworkURL, showArtwork: item.artworkURL != nil, title: item.title,
+                                 subtitle: item.subtitle) { music.playQueueItem(item) }
                     }
                 } else {
                     EmptyStateView(symbol: "music.note", title: "Nothing playing",
@@ -235,20 +256,42 @@ private struct UpNextPage: View {
 
 private struct PlaylistsPage: View {
     @ObservedObject private var music = MusicService.shared
+    @ObservedObject private var spotify = SpotifyAPI.shared
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 2) {
-                if music.playlists.isEmpty {
+                if MusicPlayer.spotify.isRunning && !spotify.connected {
+                    ConnectSpotifyNote(text: "Connect Spotify to play your playlists from here.")
+                }
+                if music.playlists.isEmpty && (spotify.connected || !MusicPlayer.spotify.isRunning) {
                     EmptyStateView(symbol: "music.note.list", title: "No playlists",
-                                   message: MusicPlayer.music.isRunning ? "Create playlists in Apple Music." : "Open Apple Music to browse playlists.")
-                        .frame(height: 220)
+                                   message: "Open Apple Music or Spotify to browse your playlists.")
+                        .frame(height: 200)
                 }
                 ForEach(music.playlists) { p in
-                    TrackRow(title: p.name, subtitle: p.subtitle, trailing: "\(p.count)") { music.play(playlist: p) }
+                    TrackRow(artworkURL: p.artworkURL, showArtwork: p.artworkURL != nil, title: p.name, subtitle: p.subtitle,
+                             trailing: "\(p.count)") { music.play(playlist: p) }
                 }
             }
         }
+    }
+}
+
+/// Points to Settings for connecting Spotify (queue, playlists, search).
+private struct ConnectSpotifyNote: View {
+    var text: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(text).font(Theme.font(12, .medium)).foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
+            PillButton(title: "Connect Spotify…", prominent: true) {
+                DrawerController.shared.close()
+                SettingsWindowController.shared.show(tab: .widgets)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
     }
 }
 
@@ -279,13 +322,14 @@ private struct SearchPage: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 2) {
                 if drawer.searchText.isEmpty {
-                    EmptyStateView(symbol: "magnifyingglass", title: "Search your library",
-                                   message: "Songs, artists and albums in Apple Music.")
+                    EmptyStateView(symbol: "magnifyingglass", title: music.searchesSpotify ? "Search Spotify" : "Search your library",
+                                   message: music.searchesSpotify ? "Songs on Spotify." : "Songs, artists and albums in Apple Music.")
                         .frame(height: 200)
                 } else {
                     Text("Songs").font(Theme.font(12, .bold)).foregroundStyle(Theme.secondary).padding(.leading, 10)
                     ForEach(music.searchResults) { item in
-                        TrackRow(title: item.title, subtitle: item.subtitle) { music.playSearchResult(item) }
+                        TrackRow(artworkURL: item.artworkURL, showArtwork: item.artworkURL != nil, title: item.title,
+                                 subtitle: item.subtitle) { music.playSearchResult(item) }
                     }
                 }
             }
@@ -312,35 +356,56 @@ private struct LyricsPage: View {
                 EmptyStateView(symbol: "quote.bubble", title: lyrics.loading ? "Finding lyrics…" : "No lyrics for this track")
             }
         } else {
-            TimelineView(.periodic(from: .now, by: 0.25)) { context in
+            // Like Apple Music: the line being sung is bright, the rest dim,
+            // and the page glides so it stays a little above centre. Lines
+            // light up a beat early, as the voice arrives. Click a line to jump there.
+            TimelineView(.periodic(from: .now, by: 0.1)) { context in
                 let pos = music.nowPlaying?.livePosition(at: context.date) ?? 0
-                let current = lyrics.currentIndex(at: pos)
+                let current = lyrics.currentIndex(at: pos + 0.15)
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Color.clear.frame(height: 60)
                             ForEach(Array(lyrics.lines.enumerated()), id: \.element.id) { i, line in
-                                Text(line.text)
-                                    .font(Theme.font(i == current ? 19 : 16, .bold))
-                                    .foregroundStyle(i == current ? Theme.primary : (i < (current ?? 0) ? Theme.tertiary : Theme.secondary))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id(i)
-                                    .onTapGesture { music.seek(to: line.time) }
+                                LyricLineView(text: line.text, state: i == current ? .current : (i < (current ?? 0) ? .past : .upcoming)) {
+                                    music.seek(to: line.time)
+                                }
+                                .id(i)
                             }
-                            Color.clear.frame(height: 100)
+                            Color.clear.frame(height: 110)
                         }
                         .padding(.horizontal, 6)
+                        .animation(Motion.smooth, value: current)
                     }
                     .onChange(of: current) { _, new in
                         guard let new else { return }
-                        withAnimation(Motion.smooth) { proxy.scrollTo(new, anchor: .center) }
+                        withAnimation(Motion.smooth) { proxy.scrollTo(new, anchor: UnitPoint(x: 0, y: 0.4)) }
                     }
-                    .onAppear { if let current { proxy.scrollTo(current, anchor: .center) } }
+                    .onAppear { if let current { proxy.scrollTo(current, anchor: UnitPoint(x: 0, y: 0.4)) } }
                 }
             }
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.15),
                                          .init(color: .black, location: 0.85), .init(color: .clear, location: 1)],
                                  startPoint: .top, endPoint: .bottom))
         }
+    }
+}
+
+private struct LyricLineView: View {
+    enum State { case past, current, upcoming }
+    var text: String
+    var state: State
+    var seek: () -> Void
+    @SwiftUI.State private var hover = false
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(Color.white.opacity(state == .current ? 1 : (hover ? 0.7 : (state == .past ? 0.3 : 0.45))))
+            .scaleEffect(state == .current ? 1 : 0.95, anchor: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: seek)
+            .onHover { hover = $0 }
     }
 }

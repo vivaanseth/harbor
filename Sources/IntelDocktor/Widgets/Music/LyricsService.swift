@@ -53,6 +53,16 @@ final class LyricsService: ObservableObject {
     private struct Response: Decodable {
         let syncedLyrics: String?
         let plainLyrics: String?
+        let duration: Double?
+    }
+
+    /// "Song (feat. X) - Remastered 2011" → "Song".
+    static func bareTitle(_ title: String) -> String {
+        var t = title
+        if let dash = t.range(of: " - ") { t = String(t[..<dash.lowerBound]) }
+        t = t.replacingOccurrences(of: #"\s*[\(\[](feat\.|ft\.|with |remaster|live|mono|stereo|radio edit)[^\)\]]*[\)\]]"#,
+                                   with: "", options: [.regularExpression, .caseInsensitive])
+        return t.trimmingCharacters(in: .whitespaces)
     }
 
     private func fetch(_ np: NowPlaying) async -> ([LyricLine], String?) {
@@ -71,14 +81,21 @@ final class LyricsService: ObservableObject {
             response = try? JSONDecoder().decode(Response.self, from: data)
         }
         if response == nil {
-            // Fall back to a looser search.
-            var s = URLComponents(string: "https://lrclib.net/api/search")!
-            s.queryItems = [.init(name: "track_name", value: np.title), .init(name: "artist_name", value: np.artist)]
-            var req = URLRequest(url: s.url!)
-            req.setValue("IntelDocktor/1.0 (personal build)", forHTTPHeaderField: "User-Agent")
-            if let (data, _) = try? await URLSession.shared.data(for: req),
-               let list = try? JSONDecoder().decode([Response].self, from: data) {
-                response = list.first(where: { $0.syncedLyrics != nil }) ?? list.first
+            // Fall back to a looser search, without the "- Remastered 2011" or
+            // "(feat. …)" Spotify adds to titles, preferring a synced result
+            // of about the same length.
+            let bare = Self.bareTitle(np.title)
+            for title in bare == np.title ? [np.title] : [np.title, bare] {
+                var s = URLComponents(string: "https://lrclib.net/api/search")!
+                s.queryItems = [.init(name: "track_name", value: title), .init(name: "artist_name", value: np.artist)]
+                var req = URLRequest(url: s.url!)
+                req.setValue("IntelDocktor/1.0 (personal build)", forHTTPHeaderField: "User-Agent")
+                guard let (data, _) = try? await URLSession.shared.data(for: req),
+                      let list = try? JSONDecoder().decode([Response].self, from: data), !list.isEmpty else { continue }
+                let synced = list.filter { $0.syncedLyrics != nil }
+                response = synced.min(by: { abs(($0.duration ?? 0) - np.duration) < abs(($1.duration ?? 0) - np.duration) })
+                    ?? list.first
+                break
             }
         }
         guard let response else { return ([], nil) }

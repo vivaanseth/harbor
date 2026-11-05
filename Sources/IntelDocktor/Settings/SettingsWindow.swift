@@ -189,6 +189,7 @@ private struct WelcomePane: View {
 
 private struct WidgetsPane: View {
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var spotify = SpotifyAPI.shared
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -271,6 +272,36 @@ private struct WidgetsPane: View {
                     Text("Automatic").tag("auto")
                     Text("Apple Music").tag("music")
                     Text("Spotify").tag("spotify")
+                }
+            }
+            Section(title: "Spotify", footer: spotify.connected
+                    ? "Up Next, your playlists and search come from Spotify. Playback goes through the Spotify app."
+                    : "What's playing, play/pause, skip and lyrics work without this. For Up Next, playlists and search, Spotify needs your OK: create a free app at the Spotify developer dashboard (any name and description), add the redirect URI below, tick Web API, save, then paste its Client ID here.") {
+                if spotify.connected {
+                    LabeledContent("Account") { Text(spotify.accountName ?? "Connected") }
+                    HStack {
+                        Spacer()
+                        Button("Disconnect") { spotify.disconnect() }
+                    }
+                } else {
+                    LabeledContent("Redirect URI") {
+                        HStack(spacing: 8) {
+                            Text(SpotifyAPI.redirectURI).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(SpotifyAPI.redirectURI, forType: .string)
+                            }
+                        }
+                    }
+                    TextField("Client ID", text: $spotify.clientID, prompt: Text("Paste from your Spotify app"))
+                    HStack {
+                        if let status = spotify.status { Text(status).foregroundStyle(.secondary) }
+                        Spacer()
+                        Button("Open Developer Dashboard") { NSWorkspace.shared.open(SpotifyAPI.dashboardURL) }
+                        Button("Connect") { spotify.connect() }
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(spotify.clientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
             }
             Section(title: "Device Batteries") {
