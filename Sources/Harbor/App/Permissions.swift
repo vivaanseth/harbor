@@ -178,7 +178,7 @@ final class Permissions: ObservableObject {
     func resetAccessibility() {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-        task.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? "com.inteldocktor.app"]
+        task.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? "com.vivaanseth.harbor"]
         task.terminationHandler = { _ in
             Task { @MainActor in self.request(.accessibility) }
         }

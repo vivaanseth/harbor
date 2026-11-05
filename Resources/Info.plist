@@ -5,42 +5,44 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Intel Docktor</string>
-	<key>CFBundleName</key>
-	<string>Intel Docktor</string>
+	<string>Harbor</string>
 	<key>CFBundleExecutable</key>
-	<string>IntelDocktor</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.inteldocktor.app</string>
+	<string>Harbor</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.vivaanseth.harbor</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Harbor</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.utilities</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Harbor controls playback and shows the current track from Apple Music and Spotify.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Harbor shows your next event and today's schedule beside the Dock.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Harbor shows your next event and today's schedule beside the Dock.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Vivaan. PolyForm Noncommercial 1.0.0.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Harbor shows the weather where you are.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Harbor shows the weather where you are.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Intel Docktor controls playback and shows the current track from Apple Music and Spotify.</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Intel Docktor shows your next event and today's schedule beside the Dock.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Intel Docktor shows your next event and today's schedule beside the Dock.</string>
-	<key>NSLocationUsageDescription</key>
-	<string>Intel Docktor shows the weather where you are.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Intel Docktor shows the weather where you are.</string>
 </dict>
 </plist>

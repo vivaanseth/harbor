@@ -109,7 +109,7 @@ final class SpotifyAPI: ObservableObject {
             status = value("error") == "access_denied" ? "Spotify access wasn't allowed." : "Spotify sign-in didn't complete."
             return
         }
-        respond(connection, status: "200 OK", message: "Intel Docktor is connected to Spotify. You can close this tab.")
+        respond(connection, status: "200 OK", message: "Harbor is connected to Spotify. You can close this tab.")
         Task { await exchange(code: code) }
     }
 
@@ -266,7 +266,7 @@ private extension Data {
 private enum Keychain {
     private static let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "com.inteldocktor.spotify",
+        kSecAttrService as String: "com.vivaanseth.harbor.spotify",
         kSecAttrAccount as String: "refresh-token",
     ]
 

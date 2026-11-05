@@ -1,18 +1,21 @@
 <div align="center">
 
-# Intel Docktor
+# Harbor
 
-**Glass widgets, window previews and a better ⌘Tab, built for the Mac you already have.**
+**Everything you need, moored to your Dock.**
+
+Glass widgets, Dock window previews and a better ⌘Tab, built for the Mac you already have.
 
 A native macOS app for Intel and Apple silicon Macs running **macOS 14 Sonoma or later**.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
 ![Intel + Apple silicon](https://img.shields.io/badge/Intel%20%2B%20Apple%20silicon-supported-0A84FF)
+![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-lightgrey)
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)
 
 <br>
 
-<img src="docs/images/hero.png" alt="Intel Docktor widgets on both sides of the macOS Dock: a System Stats widget with a live CPU graph on the left and a Music widget on the right" width="100%">
+<img src="docs/images/hero.png" alt="Harbor widgets on both sides of the macOS Dock: a System Stats widget with a live CPU graph on the left and a Music widget on the right" width="100%">
 
 <sub>System Stats on the left of the Dock, Music on the right. Both sit in the empty space beside the Dock.</sub>
 
@@ -29,6 +32,7 @@ A native macOS app for Intel and Apple silicon Macs running **macOS 14 Sonoma or
 - [Permissions](#permissions)
 - [Tips](#tips)
 - [Building from source](#building-from-source)
+- [License](#license)
 
 ---
 
@@ -76,25 +80,25 @@ Make them yours in **Settings → Widgets**: choose which widgets show, which si
 
 ## Install
 
-1. Download **IntelDocktor-1.0.0.dmg** from the [latest release](https://github.com/vivaanseth/intel-docktor/releases/latest) and open it.
-2. Drag **Intel Docktor** into your **Applications** folder.
+1. Download **Harbor-1.0.0.dmg** from the [latest release](https://github.com/vivaanseth/harbor/releases/latest) and open it.
+2. Drag **Harbor** into your **Applications** folder.
 3. The first time, **right-click the app → Open**, then click **Open**. (On macOS 15 or later, open it once, then click **Open Anyway** in **System Settings → Privacy & Security**.) A welcome window walks you through the rest.
 
 > [!IMPORTANT]
 > Releases aren't notarized by Apple, so macOS asks you to confirm the first time you open the app. After that it opens normally.
 
 <p align="center">
-<img src="docs/images/settings-welcome.png" alt="The Intel Docktor welcome screen explaining Hover, Glance, Act and Cmd+Tab" width="720">
+<img src="docs/images/settings-welcome.png" alt="The Harbor welcome screen explaining Hover, Glance, Act and Cmd+Tab" width="720">
 </p>
 
 > [!NOTE]
-> Intel Docktor runs from the menu bar (look for the Dock icon). It has no Dock icon of its own.
+> Harbor runs from the menu bar (look for the Dock icon). It has no Dock icon of its own.
 
 ---
 
 ## Getting started
 
-1. **Open Intel Docktor.** Widgets appear beside your Dock right away.
+1. **Open Harbor.** Widgets appear beside your Dock right away.
 2. **Turn on the features you want** in **Settings → Permissions**. Nothing is requested until you ask for it.
 3. **Hover or click a widget** to open its drawer.
 4. **Hover an app in the Dock** to see its windows, or press **⌘Tab** to try the switcher.
@@ -133,7 +137,7 @@ Each permission is optional and only unlocks the feature next to it.
 | **Notifications** | Calendar reminders |
 
 > [!TIP]
-> If Accessibility is switched on in System Settings but Intel Docktor still asks for it, choose **Turn On Accessibility…** from the menu bar icon, then **Reset and Turn On**. This clears an old entry left by a previous build.
+> If Accessibility is switched on in System Settings but Harbor still asks for it, choose **Turn On Accessibility…** from the menu bar icon, then **Reset and Turn On**. This clears an old entry left by a previous build.
 
 ---
 
@@ -141,7 +145,7 @@ Each permission is optional and only unlocks the feature next to it.
 
 - **Widgets look cramped?** Make the Dock a little smaller in **System Settings → Desktop & Dock**. Widgets switch to compact tiles when space is tight and move to the other side when they don't fit.
 - **Widgets only appear with the Dock at the bottom** of the screen.
-- **The built-in ⌘Tab comes back** whenever Intel Docktor quits, even after a crash.
+- **The built-in ⌘Tab comes back** whenever Harbor quits, even after a crash.
 - **Spotify without Premium:** Up Next and "playing from" are read from Spotify's Now Playing panel, so keep that panel open. To add a playlist, copy its link in Spotify (Share → Copy link) and choose **Add Copied Link** in the Music drawer.
 
 ---
@@ -151,7 +155,7 @@ Each permission is optional and only unlocks the feature next to it.
 **Requirements:** Xcode 15 or later (or the Command Line Tools with Swift 5.9+).
 
 ```bash
-./build.sh                 # Release build for Intel → build/Intel Docktor.app
+./build.sh                 # Release build for Intel → build/Harbor.app
 UNIVERSAL=1 ./build.sh     # Intel + Apple silicon
 ./build.sh --install       # Also copy the app to /Applications
 CONFIG=debug ./build.sh    # Faster debug build
@@ -167,7 +171,7 @@ macOS ties permissions to an app's signature. Run `scripts/setup-signing.sh` onc
 ### Project layout
 
 ```
-Sources/IntelDocktor/
+Sources/Harbor/
 ├── App/          App lifecycle, menu bar, permissions
 ├── Dock/         Dock tracking and motion
 ├── Previews/     Dock window previews
@@ -179,6 +183,12 @@ Sources/IntelDocktor/
 
 ---
 
+## License
+
+Harbor is free for personal and other noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Commercial use requires permission.
+
+---
+
 <div align="center">
-<sub>Inspired by <a href="https://docktorapp.com/">docktor</a>, rebuilt from scratch for Macs that can't run macOS 26.</sub>
+<sub>Made by <a href="https://github.com/vivaanseth">@vivaanseth</a> · <a href="LICENSE.md">PolyForm Noncommercial 1.0.0</a></sub>
 </div>

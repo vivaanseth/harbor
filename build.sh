@@ -1,12 +1,12 @@
 #!/bin/bash
-# Builds "Intel Docktor.app" into ./build
+# Builds "Harbor.app" into ./build
 #   ./build.sh              native Intel (x86_64) release build
 #   UNIVERSAL=1 ./build.sh  Intel + Apple silicon
 #   ./build.sh --install    also copy the app to /Applications
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME="Intel Docktor"
+APP_NAME="Harbor"
 APP="build/$APP_NAME.app"
 
 if [[ "${UNIVERSAL:-0}" == "1" ]]; then
@@ -23,7 +23,7 @@ BIN_DIR="$(swift build -c "$CONFIG" "${ARCH_FLAGS[@]}" --show-bin-path)"
 echo "▸ Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/IntelDocktor" "$APP/Contents/MacOS/IntelDocktor"
+cp "$BIN_DIR/Harbor" "$APP/Contents/MacOS/Harbor"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
@@ -46,7 +46,7 @@ cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 SIGNING_DIR=".signing"
 SIGNING_KEYCHAIN="$PWD/$SIGNING_DIR/signing.keychain-db"
 if [[ -z "${SIGN_IDENTITY:-}" && -f "$SIGNING_KEYCHAIN" ]]; then
-  echo "▸ Signing (Intel Docktor Local Signing)"
+  echo "▸ Signing (Harbor Local Signing)"
   security unlock-keychain -p "$(cat "$SIGNING_DIR/keychain-password")" "$SIGNING_KEYCHAIN"
   # codesign only finds identities in the search list, so add the signing
   # keychain for the moment it takes, then put the list back exactly.
@@ -58,7 +58,7 @@ if [[ -z "${SIGN_IDENTITY:-}" && -f "$SIGNING_KEYCHAIN" ]]; then
   restore_keychains() { security list-keychains -d user -s "${ORIG_KEYCHAINS[@]}"; }
   trap restore_keychains EXIT
   security list-keychains -d user -s "${ORIG_KEYCHAINS[@]}" "$SIGNING_KEYCHAIN"
-  codesign --force --sign "Intel Docktor Local Signing" --timestamp=none "$APP"
+  codesign --force --sign "Harbor Local Signing" --timestamp=none "$APP"
   restore_keychains
   trap - EXIT
 else
@@ -68,10 +68,10 @@ fi
 
 if [[ "${1:-}" == "--install" ]]; then
   echo "▸ Installing to /Applications"
-  pkill -x IntelDocktor 2>/dev/null || true
+  pkill -x Harbor 2>/dev/null || true
   rm -rf "/Applications/$APP_NAME.app"
   cp -R "$APP" /Applications/
   APP="/Applications/$APP_NAME.app"
 fi
 
-echo "✓ Built $APP ($(lipo -archs "$APP/Contents/MacOS/IntelDocktor"))"
+echo "✓ Built $APP ($(lipo -archs "$APP/Contents/MacOS/Harbor"))"

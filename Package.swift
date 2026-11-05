@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "IntelDocktor",
+    name: "Harbor",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "IntelDocktor",
-            path: "Sources/IntelDocktor",
+            name: "Harbor",
+            path: "Sources/Harbor",
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),

@@ -56,7 +56,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, ObservableObje
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 600),
                              styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
                              backing: .buffered, defer: false)
-            w.title = "Intel Docktor"
+            w.title = "Harbor"
             w.titlebarAppearsTransparent = true
             w.isReleasedWhenClosed = false
             w.contentView = NSHostingView(rootView: SettingsRootView(controller: self))
@@ -509,7 +509,7 @@ private struct PermissionsPane: View {
                     if kind != PermissionKind.allCases.last { Divider() }
                 }
             }
-            Button("Relaunch Intel Docktor") { Relauncher.relaunch() }
+            Button("Relaunch Harbor") { Relauncher.relaunch() }
         }
         .formStyle(.grouped)
     }
@@ -554,12 +554,12 @@ private struct AboutPane: View {
             HStack(spacing: 16) {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 64, height: 64)
                 VStack(alignment: .leading) {
-                    Text("Intel Docktor").font(.title.bold())
+                    Text("Harbor").font(.title.bold())
                     Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0") · macOS 14+ · Intel & Apple silicon")
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("A from-scratch rebuild of the docktor idea for Macs that can't run macOS 26: Dock window previews, a Cmd+Tab window switcher, and glass widgets for music, calendar, weather, system stats and batteries.")
+            Text("Everything you need, moored to your Dock: Dock window previews, a Cmd+Tab window switcher, and glass widgets for music, calendar, weather, system stats and batteries.")
                 .fixedSize(horizontal: false, vertical: true)
             Text("Weather by Open-Meteo · Lyrics by LRCLIB · Everything else is read locally on your Mac.")
                 .font(.callout).foregroundStyle(.secondary)

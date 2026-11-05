@@ -5,6 +5,6 @@ build/
 DerivedData/
 
 # Local signing identity: contains a private key and keychain password
-.signing/
+.signing*/
 
 .DS_Store

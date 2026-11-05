@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            let image = NSImage(systemSymbolName: "dock.rectangle", accessibilityDescription: "Intel Docktor")
+            let image = NSImage(systemSymbolName: "dock.rectangle", accessibilityDescription: "Harbor")
             image?.isTemplate = true
             button.image = image
         }
@@ -78,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Turn On Accessibility"
-        alert.informativeText = "macOS isn't letting Intel Docktor use Accessibility yet. If it's already listed and switched on, that entry was saved for an earlier build and no longer applies.\n\nReset clears it. When System Settings opens, switch Intel Docktor on again."
+        alert.informativeText = "macOS isn't letting Harbor use Accessibility yet. If it's already listed and switched on, that entry was saved for an earlier build and no longer applies.\n\nReset clears it. When System Settings opens, switch Harbor on again."
         alert.addButton(withTitle: "Reset and Turn On")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let title = NSMenuItem(title: "Intel Docktor", action: nil, keyEquivalent: "")
+        let title = NSMenuItem(title: "Harbor", action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
         if !PermissionCache.shared.accessibility {
@@ -108,7 +108,7 @@ extension AppDelegate: NSMenuDelegate {
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Permissions…", action: #selector(openPermissions), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Intel Docktor", action: #selector(quit), keyEquivalent: "q").target = self
+        menu.addItem(withTitle: "Quit Harbor", action: #selector(quit), keyEquivalent: "q").target = self
     }
 }
 

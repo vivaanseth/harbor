@@ -1,13 +1,14 @@
 import AppKit
 
 @main
-enum IntelDocktorMain {
+enum HarborMain {
     @MainActor
     static func main() {
         if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == HotKeyWatchdog.flag,
            let pid = pid_t(CommandLine.arguments[2]) {
             HotKeyWatchdog.run(watching: pid)
         }
+        SettingsMigration.run()
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
@@ -34,5 +35,17 @@ enum HotKeyWatchdog {
         }
         SymbolicHotKeys.setNativeSwitcherEnabled(true)
         exit(0)
+    }
+}
+
+/// Harbor used to be called Intel Docktor (bundle ID com.inteldocktor.app).
+/// Bring its settings across once, so renaming doesn't reset anything.
+enum SettingsMigration {
+    static func run() {
+        let d = UserDefaults.standard
+        guard !d.bool(forKey: "migratedFromIntelDocktor") else { return }
+        d.set(true, forKey: "migratedFromIntelDocktor")
+        guard let old = UserDefaults(suiteName: "com.inteldocktor.app")?.persistentDomain(forName: "com.inteldocktor.app") else { return }
+        for (key, value) in old where d.object(forKey: key) == nil { d.set(value, forKey: key) }
     }
 }

@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DIR=".signing"
-NAME="Intel Docktor Local Signing"
+NAME="Harbor Local Signing"
 KEYCHAIN="$PWD/$DIR/signing.keychain-db"
 
 if [[ -f "$KEYCHAIN" ]]; then
@@ -29,7 +29,7 @@ x509_extensions = ext
 prompt = no
 [ dn ]
 CN = $NAME
-O = Intel Docktor (local build)
+O = Harbor (local build)
 [ ext ]
 basicConstraints = critical, CA:false
 keyUsage = critical, digitalSignature

@@ -74,7 +74,7 @@ final class LyricsService: ObservableObject {
             .init(name: "duration", value: String(Int(np.duration.rounded()))),
         ]
         var request = URLRequest(url: comps.url!)
-        request.setValue("IntelDocktor/1.0 (personal build)", forHTTPHeaderField: "User-Agent")
+        request.setValue("Harbor/1.0 (https://github.com/vivaanseth/harbor)", forHTTPHeaderField: "User-Agent")
         var response: Response?
         if let (data, resp) = try? await URLSession.shared.data(for: request),
            (resp as? HTTPURLResponse)?.statusCode == 200 {
@@ -89,7 +89,7 @@ final class LyricsService: ObservableObject {
                 var s = URLComponents(string: "https://lrclib.net/api/search")!
                 s.queryItems = [.init(name: "track_name", value: title), .init(name: "artist_name", value: np.artist)]
                 var req = URLRequest(url: s.url!)
-                req.setValue("IntelDocktor/1.0 (personal build)", forHTTPHeaderField: "User-Agent")
+                req.setValue("Harbor/1.0 (https://github.com/vivaanseth/harbor)", forHTTPHeaderField: "User-Agent")
                 guard let (data, _) = try? await URLSession.shared.data(for: req),
                       let list = try? JSONDecoder().decode([Response].self, from: data), !list.isEmpty else { continue }
                 let synced = list.filter { $0.syncedLyrics != nil }
